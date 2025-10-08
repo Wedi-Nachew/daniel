@@ -171,8 +171,7 @@ export default function QuickBillingScreenNew({
               </View>
 
               <View style={styles.modernThankYou}>
-                <Text style={styles.thankYouText}>{t.thankYou}</Text>
-                <Text style={styles.thankYouTextTi}>ብምምጻእኩም የቐንየለይ!</Text>
+                <Text style={styles.thankYouText}>Thank you! / የቐንየለይ!</Text>
               </View>
             </View>
           </ScrollView>
@@ -221,7 +220,7 @@ export default function QuickBillingScreenNew({
           <View style={styles.halfColumn}>
             <Text style={styles.inputLabel}>{t.quantity}</Text>
             <TextInput
-              style={styles.modernInput}
+              style={[styles.modernInput, styles.centerInput]}
               placeholder="0"
               value={quantity}
               onChangeText={setQuantity}
@@ -373,6 +372,9 @@ const styles = StyleSheet.create({
     padding: 14,
     fontSize: 16,
     color: COLORS.text,
+  },
+  centerInput: {
+    textAlign: 'center',
   },
   row: {
     flexDirection: 'row',

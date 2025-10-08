@@ -176,8 +176,7 @@ export default function InventoryBillingScreen({
                 </View>
 
                 <View style={styles.modernThankYou}>
-                  <Text style={styles.thankYouText}>{t.thankYou}</Text>
-                  <Text style={styles.thankYouTextTi}>ብምምጻእኩም የቐንየለይ!</Text>
+                  <Text style={styles.thankYouText}>Thank you! / የቐንየለይ!</Text>
                 </View>
               </View>
             </ScrollView>
@@ -427,13 +426,13 @@ const styles = StyleSheet.create({
   },
   inventoryCard: {
     backgroundColor: COLORS.surface,
-    width: '47%',
+    width: '30%',
     margin: '1.5%',
-    padding: 20,
-    borderRadius: 12,
+    padding: 12,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 100,
+    minHeight: 70,
     elevation: 2,
     shadowColor: COLORS.shadow,
     shadowOffset: { width: 0, height: 1 },
@@ -441,14 +440,14 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
   },
   inventoryCardName: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
     color: COLORS.text,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 2,
   },
   inventoryCardPrice: {
-    fontSize: 14,
+    fontSize: 12,
     color: COLORS.textLight,
     textAlign: 'center',
   },

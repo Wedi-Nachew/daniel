@@ -130,3 +130,33 @@ export const saveInventory = async (inventory) => {
     return false;
   }
 };
+
+export const loadSavedPrinter = async () => {
+  try {
+    const stored = await AsyncStorage.getItem(STORAGE_KEYS.PRINTER);
+    return stored ? JSON.parse(stored) : null;
+  } catch (error) {
+    console.error('Error loading saved printer:', error);
+    return null;
+  }
+};
+
+export const saveSavedPrinter = async (printer) => {
+  try {
+    await AsyncStorage.setItem(STORAGE_KEYS.PRINTER, JSON.stringify(printer));
+    return true;
+  } catch (error) {
+    console.error('Error saving printer:', error);
+    return false;
+  }
+};
+
+export const clearSavedPrinter = async () => {
+  try {
+    await AsyncStorage.removeItem(STORAGE_KEYS.PRINTER);
+    return true;
+  } catch (error) {
+    console.error('Error clearing saved printer:', error);
+    return false;
+  }
+};

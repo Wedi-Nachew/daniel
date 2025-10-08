@@ -29,6 +29,7 @@ export const STORAGE_KEYS = {
   SECURITY_ANSWER_2: 'securityAnswer2',
   LANG: 'lang',
   INVENTORY: 'inventory',
+  PRINTER: 'printer',
   LICENSE_KEY: 'licenseKey',
   DEVICE_ID: 'deviceId',
   LICENSE_STATUS: 'licenseStatus',

@@ -29,6 +29,9 @@ export default function SettingsScreen({
   const [adminPassword, setAdminPassword] = useState('');
   const [deviceId, setDeviceId] = useState('');
   const [isEditingBusiness, setIsEditingBusiness] = useState(false);
+  const [licenseStatus, setLicenseStatus] = useState(null);
+  const [showActivationModal, setShowActivationModal] = useState(false);
+  const [licenseKey, setLicenseKey] = useState('');
 
   useEffect(() => {
     setLocalBusiness(business);
@@ -36,12 +39,19 @@ export default function SettingsScreen({
 
   useEffect(() => {
     loadDeviceId();
+    loadLicenseStatus();
   }, []);
 
   const loadDeviceId = async () => {
     const { getDeviceId } = require('../utils/license');
     const id = await getDeviceId();
     setDeviceId(id || 'Loading...');
+  };
+
+  const loadLicenseStatus = async () => {
+    const { checkLicense } = require('../utils/license');
+    const status = await checkLicense();
+    setLicenseStatus(status);
   };
 
   const handleVersionTap = () => {
@@ -88,6 +98,33 @@ export default function SettingsScreen({
     const Clipboard = require('expo-clipboard');
     await Clipboard.setStringAsync(deviceId);
     Alert.alert(t.success, t.deviceIdCopied);
+  };
+
+  const handleActivateLicense = () => {
+    setShowActivationModal(true);
+  };
+
+  const handleSubmitLicense = async () => {
+    if (!licenseKey.trim()) {
+      Alert.alert(t.error, 'Please enter a license key');
+      return;
+    }
+
+    try {
+      const { activateLicense } = require('../utils/license');
+      const result = await activateLicense(licenseKey.trim());
+      
+      if (result.success) {
+        Alert.alert(t.success, 'License activated successfully!');
+        setShowActivationModal(false);
+        setLicenseKey('');
+        loadLicenseStatus(); // Refresh status
+      } else {
+        Alert.alert(t.error, result.error || 'Invalid license key');
+      }
+    } catch (error) {
+      Alert.alert(t.error, 'Activation failed. Please try again.');
+    }
   };
 
   const handlePickImage = async () => {
@@ -180,6 +217,46 @@ export default function SettingsScreen({
             <Text style={styles.uploadButtonText}>{t.uploadLogo}</Text>
           </TouchableOpacity>
         )}
+      </View>
+
+      {/* License Activation */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>🔑 License Activation</Text>
+        <Text style={styles.cardSubtitle}>Manage your app license</Text>
+        
+        <View style={[
+          styles.licenseStatusBox,
+          licenseStatus?.status === 'active' ? styles.licenseActivated : styles.licenseTrial
+        ]}>
+          <Text style={[
+            styles.licenseStatusText,
+            licenseStatus?.status === 'active' ? styles.activatedText : styles.trialText
+          ]}>
+            {licenseStatus?.status === 'active' 
+              ? 'Status: Activated ✅' 
+              : licenseStatus?.status === 'trial' 
+                ? `Trial: ${licenseStatus.daysLeft} days left ⏰`
+                : licenseStatus?.status === 'expired'
+                ? 'Status: Trial Expired ❌'
+                : 'Status: Not Activated ❌'
+            }
+          </Text>
+        </View>
+        
+        <TouchableOpacity 
+          style={styles.manageButton}
+          onPress={() => {
+            if (licenseStatus?.status === 'active') {
+              Alert.alert('License Info', 'Your app is activated and ready to use!');
+            } else {
+              handleActivateLicense();
+            }
+          }}
+        >
+          <Text style={styles.manageButtonText}>
+            {licenseStatus?.status === 'active' ? '📋 License Info' : '🔑 Activate License'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Device ID Display */}
@@ -348,6 +425,48 @@ export default function SettingsScreen({
         </View>
       </Modal>
 
+      {/* License Activation Modal */}
+      <Modal visible={showActivationModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>🔑 Activate License</Text>
+            <Text style={styles.modalSubtitle}>Enter your license key to activate the app</Text>
+            
+            <Text style={styles.deviceIdLabel}>Your Device ID:</Text>
+            <View style={styles.deviceIdDisplayBox}>
+              <Text style={styles.deviceIdDisplayText}>{deviceId}</Text>
+            </View>
+            
+            <TextInput
+              style={styles.licenseInput}
+              placeholder="Enter License Key (XXXX-XXXX-XXXX-XXXX)"
+              value={licenseKey}
+              onChangeText={setLicenseKey}
+              placeholderTextColor={COLORS.textLight}
+              autoCapitalize="characters"
+              autoCorrect={false}
+            />
+
+            <TouchableOpacity 
+              style={styles.activateButton} 
+              onPress={handleSubmitLicense}
+            >
+              <Text style={styles.activateButtonText}>✓ Activate</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.cancelModalButton} 
+              onPress={() => {
+                setShowActivationModal(false);
+                setLicenseKey('');
+              }}
+            >
+              <Text style={styles.cancelModalText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Admin License Generator Modal */}
       <Modal visible={showAdminPanel} animationType="slide">
         <AdminLicenseScreen 
@@ -508,6 +627,42 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  licenseStatusBox: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  licenseActivated: {
+    backgroundColor: COLORS.success + '15',
+    borderColor: COLORS.success,
+  },
+  licenseTrial: {
+    backgroundColor: '#FFA500' + '15',
+    borderColor: '#FFA500',
+  },
+  licenseStatusText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  activatedText: {
+    color: COLORS.success,
+  },
+  trialText: {
+    color: '#FFA500',
+  },
+  manageButton: {
+    backgroundColor: COLORS.primary + '15',
+    padding: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  manageButtonText: {
+    color: COLORS.primary,
+    fontSize: 14,
+    fontWeight: '600',
+  },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -644,5 +799,50 @@ const styles = StyleSheet.create({
     color: COLORS.textLight,
     fontSize: 14,
     fontWeight: '600',
+  },
+  deviceIdLabel: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: 8,
+  },
+  deviceIdDisplayBox: {
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  deviceIdDisplayText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.primary,
+    textAlign: 'center',
+    letterSpacing: 1,
+  },
+  licenseInput: {
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    borderRadius: 8,
+    padding: 14,
+    fontSize: 16,
+    marginBottom: 16,
+    backgroundColor: COLORS.surface,
+    color: COLORS.text,
+    textAlign: 'center',
+    letterSpacing: 1,
+  },
+  activateButton: {
+    backgroundColor: COLORS.success,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  activateButtonText: {
+    color: COLORS.surface,
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

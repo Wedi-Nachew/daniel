@@ -102,21 +102,40 @@ export default function App() {
 
   const handleScanPrinters = async () => {
     setPrinterStatus('searching');
-    const printers = await scanForPrinters();
-    setAvailablePrinters(printers);
+    const result = await scanForPrinters();
+
+    if (!result.permissionGranted) {
+      Alert.alert('Permission Required', 'Bluetooth permission is required to scan for printers.');
+      setPrinterStatus('disconnected');
+      return;
+    }
+
+    if (!result.bluetoothEnabled) {
+      Alert.alert('Bluetooth Disabled', 'Please turn on Bluetooth to scan for printers.');
+      setPrinterStatus('disconnected');
+      return;
+    }
+
+    if (result.error) {
+      Alert.alert(t.printerError || 'Error', 'Unable to scan for printers. Please try again.');
+      setPrinterStatus('disconnected');
+      return;
+    }
+
+    setAvailablePrinters(result.printers);
     
-    if (printers.length === 0) {
+    if (result.printers.length === 0) {
       Alert.alert(t.noPrintersFound || 'No Printers Found', 'No Bluetooth printers were detected.');
       setPrinterStatus('disconnected');
     }
   };
 
   const handleConnectPrinter = async (printer) => {
-    const success = await connectToPrinter(printer);
-    if (success) {
+    const connected = await connectToPrinter(printer);
+    if (connected) {
       setPrinterStatus('connected');
       setShowPrinterModal(false);
-      Alert.alert(t.printerConnected || 'Success', 'Printer connected successfully');
+      Alert.alert(t.printerConnected || 'Success', `Connected to ${connected.name}`);
     } else {
       setPrinterStatus('disconnected');
       Alert.alert(t.printerError || 'Error', 'Failed to connect to printer');
@@ -316,12 +335,12 @@ export default function App() {
               ) : (
                 availablePrinters.map((printer, index) => (
                   <TouchableOpacity
-                    key={index}
+                    key={printer.address || index}
                     style={styles.printerItem}
                     onPress={() => handleConnectPrinter(printer)}
                   >
                     <Text style={styles.printerName}>{printer.name}</Text>
-                    <Text style={styles.printerAddress}>{printer.target}</Text>
+                    <Text style={styles.printerAddress}>{printer.address}</Text>
                   </TouchableOpacity>
                 ))
               )}
