@@ -1,0 +1,56 @@
+{
+  "expo": {
+    "name": "ዳንኤል ዳመጥሓን",
+    "slug": "mill-receipt-pro",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "fonts": [
+      "assets/fonts/Lato-Regular.ttf",
+      "assets/fonts/Lato-Bold.ttf"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.millreceiptpro.app",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to upload your business logo.",
+        "NSCameraUsageDescription": "This app needs access to your camera to take a photo for your business logo.",
+        "NSBluetoothAlwaysUsageDescription": "This app needs Bluetooth to connect to thermal printers for printing receipts.",
+        "NSBluetoothPeripheralUsageDescription": "This app needs Bluetooth to connect to thermal printers for printing receipts."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffa62b"
+      },
+      "package": "com.millreceiptpro.app",
+      "permissions": [
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "BLUETOOTH_SCAN",
+        "BLUETOOTH_CONNECT",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/icon.png"
+    },
+    "scheme": "millreceiptpro",
+    "plugins": [
+      "expo-router"
+    ]
+  }
+}
