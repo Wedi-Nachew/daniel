@@ -9,6 +9,7 @@ import {
   Modal,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../utils/constants';
@@ -23,7 +24,13 @@ import {
   loadInventory,
   saveInventory,
 } from '../utils/storage';
-import { scanForPrinters, connectToPrinter } from '../utils/printer';
+import {
+  scanForPrinters,
+  connectToPrinter,
+  disconnectPrinter,
+  isBluetoothEnabled,
+  getActivePrinter,
+} from '../utils/printer';
 import QuickBillingScreen from '../components/QuickBillingScreenNew';
 import AnalyticsScreen from '../components/AnalyticsScreenNew';
 import HistoryScreen from '../components/HistoryScreenNew';
@@ -50,6 +57,11 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [isLicensed, setIsLicensed] = useState(false);
   const [licenseInfo, setLicenseInfo] = useState(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [selectedPrinter, setSelectedPrinter] = useState(null);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [bluetoothEnabled, setBluetoothEnabled] = useState(true);
+  const [printerError, setPrinterError] = useState(null);
 
   const t = translations[lang];
 
@@ -57,27 +69,66 @@ export default function App() {
     initializeApp();
   }, []);
 
+  // Check Bluetooth status periodically
+  useEffect(() => {
+    const checkBluetooth = async () => {
+      try {
+        const enabled = await isBluetoothEnabled();
+        setBluetoothEnabled(enabled);
+
+        // Update printer status based on Bluetooth state
+        if (!enabled && printerStatus === 'connected') {
+          setPrinterStatus('disconnected');
+          setPrinterError('Bluetooth was disabled');
+        }
+      } catch (error) {
+        console.warn('Bluetooth check error:', error);
+      }
+    };
+
+    checkBluetooth();
+    const interval = setInterval(checkBluetooth, 5000);
+    return () => clearInterval(interval);
+  }, [printerStatus]);
+
   const initializeApp = async () => {
-    // Check license first
-    const license = await checkLicense();
-    setLicenseInfo(license);
-    setIsLicensed(license.isLicensed);
-    
-    // Load data regardless (for trial period)
-    await loadData();
+    try {
+      // Check license first
+      const license = await checkLicense();
+      setLicenseInfo(license);
+      setIsLicensed(license.isLicensed);
+
+      // Load data regardless (for trial period)
+      await loadData();
+
+      // Try to reconnect to previously connected printer
+      const activePrinter = getActivePrinter();
+      if (activePrinter) {
+        setPrinterStatus('connected');
+        setSelectedPrinter(activePrinter);
+      }
+    } catch (error) {
+      console.error('Initialization error:', error);
+      setLoading(false);
+    }
   };
 
   const loadData = async () => {
-    const storedReceipts = await loadReceipts();
-    const storedBusiness = await loadBusiness();
-    const storedLang = await loadLanguage();
-    const storedInventory = await loadInventory();
+    try {
+      const storedReceipts = await loadReceipts();
+      const storedBusiness = await loadBusiness();
+      const storedLang = await loadLanguage();
+      const storedInventory = await loadInventory();
 
-    setReceiptsState(storedReceipts);
-    setBusinessState(storedBusiness);
-    setLangState(storedLang);
-    setInventoryState(storedInventory);
-    setLoading(false);
+      setReceiptsState(storedReceipts);
+      setBusinessState(storedBusiness);
+      setLangState(storedLang);
+      setInventoryState(storedInventory);
+    } catch (error) {
+      console.error('Data loading error:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const setReceipts = async (newReceipts) => {
@@ -101,44 +152,124 @@ export default function App() {
   };
 
   const handleScanPrinters = async () => {
-    setPrinterStatus('searching');
-    const result = await scanForPrinters();
+    setIsScanning(true);
+    setPrinterError(null);
+    setAvailablePrinters([]);
 
-    if (!result.permissionGranted) {
-      Alert.alert('Permission Required', 'Bluetooth permission is required to scan for printers.');
-      setPrinterStatus('disconnected');
-      return;
-    }
+    try {
+      const result = await scanForPrinters();
 
-    if (!result.bluetoothEnabled) {
-      Alert.alert('Bluetooth Disabled', 'Please turn on Bluetooth to scan for printers.');
-      setPrinterStatus('disconnected');
-      return;
-    }
+      if (!result.permissionGranted) {
+        setPrinterError('Bluetooth permission required');
+        Alert.alert(
+          t.permissionRequired || 'Permission Required',
+          'Please grant Bluetooth permissions in app settings.'
+        );
+        return;
+      }
 
-    if (result.error) {
-      Alert.alert(t.printerError || 'Error', 'Unable to scan for printers. Please try again.');
-      setPrinterStatus('disconnected');
-      return;
-    }
+      setBluetoothEnabled(result.bluetoothEnabled);
 
-    setAvailablePrinters(result.printers);
-    
-    if (result.printers.length === 0) {
-      Alert.alert(t.noPrintersFound || 'No Printers Found', 'No Bluetooth printers were detected.');
-      setPrinterStatus('disconnected');
+      if (!result.bluetoothEnabled) {
+        setPrinterError('Bluetooth is disabled');
+        Alert.alert(
+          t.bluetoothDisabled || 'Bluetooth Disabled',
+          'Please turn on Bluetooth to scan for printers.'
+        );
+        return;
+      }
+
+      if (result.error) {
+        setPrinterError('Scan failed');
+        Alert.alert(
+          t.printerError || 'Error',
+          'Unable to scan for printers. Please try again.'
+        );
+        return;
+      }
+
+      const printerList = result.printers || [];
+      setAvailablePrinters(printerList);
+      setPrinterError(null);
+
+      if (printerList.length > 0) {
+        Alert.alert(
+          t.printersFound || 'Printers Found',
+          `Found ${printerList.length} printer(s). Tap one to connect.`
+        );
+      } else {
+        setPrinterError('No printers found');
+        Alert.alert(
+          t.noPrintersFound || 'No Printers Found',
+          'Make sure your printer is on and in pairing mode.'
+        );
+      }
+    } catch (error) {
+      console.error('Scan error:', error);
+      setPrinterError('Scan error occurred');
+      Alert.alert(
+        t.scanError || 'Scan Error',
+        'Failed to scan for printers. Please try again.'
+      );
+    } finally {
+      setIsScanning(false);
     }
   };
 
   const handleConnectPrinter = async (printer) => {
-    const connected = await connectToPrinter(printer);
-    if (connected) {
-      setPrinterStatus('connected');
-      setShowPrinterModal(false);
-      Alert.alert(t.printerConnected || 'Success', `Connected to ${connected.name}`);
-    } else {
+    setIsConnecting(true);
+    setSelectedPrinter(printer);
+    setPrinterError(null);
+
+    try {
+      const connected = await connectToPrinter(printer);
+
+      if (connected) {
+        setPrinterStatus('connected');
+        setSelectedPrinter(connected);
+        setPrinterError(null);
+        setShowPrinterModal(false);
+        Alert.alert(
+          t.printerConnected || 'Success',
+          `Connected to ${connected.name}`
+        );
+      } else {
+        setSelectedPrinter(null);
+        setPrinterError('Failed to connect');
+        Alert.alert(
+          t.printerError || 'Error',
+          'Failed to connect to printer. Please try again.'
+        );
+      }
+    } catch (error) {
+      console.error('Connection error:', error);
+      setSelectedPrinter(null);
+      setPrinterError(error.message || 'Connection failed');
+      Alert.alert(
+        t.connectionFailed || 'Connection Failed',
+        error.message || 'Unable to connect to printer.'
+      );
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  const handleDisconnectPrinter = async () => {
+    try {
+      await disconnectPrinter();
       setPrinterStatus('disconnected');
-      Alert.alert(t.printerError || 'Error', 'Failed to connect to printer');
+      setSelectedPrinter(null);
+      setPrinterError(null);
+      Alert.alert(
+        t.disconnected || 'Disconnected',
+        'Printer disconnected successfully.'
+      );
+    } catch (error) {
+      console.error('Disconnect error:', error);
+      Alert.alert(
+        t.error || 'Error',
+        'Failed to disconnect printer.'
+      );
     }
   };
 
@@ -146,31 +277,53 @@ export default function App() {
     const color =
       printerStatus === 'connected'
         ? COLORS.success
-        : printerStatus === 'searching'
+        : !bluetoothEnabled
+        ? COLORS.error
+        : isScanning || isConnecting
         ? COLORS.warning
         : COLORS.error;
 
     return <View style={[styles.statusDot, { backgroundColor: color }]} />;
   };
 
+  const getPrinterStatusText = () => {
+    if (!bluetoothEnabled) return 'Bluetooth OFF';
+    if (printerStatus === 'connected' && selectedPrinter) {
+      return selectedPrinter.name;
+    }
+    if (isScanning) return 'Scanning...';
+    if (isConnecting) return 'Connecting...';
+    return 'Not Connected';
+  };
+
   const handleLicenseValid = async () => {
-    const license = await checkLicense();
-    setLicenseInfo(license);
-    setIsLicensed(license.isLicensed);
+    try {
+      const license = await checkLicense();
+      setLicenseInfo(license);
+      setIsLicensed(license.isLicensed);
+    } catch (error) {
+      console.error('License check error:', error);
+    }
   };
 
   const renderActiveScreen = () => {
     if (loading) {
       return (
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading...</Text>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>{t.loading || 'Loading...'}</Text>
         </View>
       );
     }
 
     // Show license screen if not licensed
     if (!isLicensed) {
-      return <LicenseScreen onLicenseValid={handleLicenseValid} translations={t} />;
+      return (
+        <LicenseScreen
+          onLicenseValid={handleLicenseValid}
+          translations={t}
+        />
+      );
     }
 
     switch (activeTab) {
@@ -222,8 +375,11 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
-      
+      <StatusBar
+        barStyle="light-content"
+        backgroundColor={COLORS.primary}
+      />
+
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
@@ -234,9 +390,12 @@ export default function App() {
             </Text>
           )}
         </View>
+
+        {/* Printer Status Button */}
         <TouchableOpacity
           style={styles.printerButton}
           onPress={() => setShowPrinterModal(true)}
+          activeOpacity={0.7}
         >
           <Text style={styles.printerEmoji}>🖨️</Text>
           {renderPrinterStatusDot()}
@@ -249,36 +408,54 @@ export default function App() {
       {/* Bottom Navigation */}
       <View style={styles.bottomNav}>
         <TouchableOpacity
-          style={[styles.navItem, activeTab === 'billing' && styles.navItemActive]}
+          style={[
+            styles.navItem,
+            activeTab === 'billing' && styles.navItemActive,
+          ]}
           onPress={() => setActiveTab('billing')}
         >
           <Text style={styles.navIcon}>🧾</Text>
           <Text
-            style={[styles.navText, activeTab === 'billing' && styles.navTextActive]}
+            style={[
+              styles.navText,
+              activeTab === 'billing' && styles.navTextActive,
+            ]}
           >
-            Billing
+            {t.billing || 'Billing'}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.navItem, activeTab === 'analytics' && styles.navItemActive]}
+          style={[
+            styles.navItem,
+            activeTab === 'analytics' && styles.navItemActive,
+          ]}
           onPress={() => setActiveTab('analytics')}
         >
           <Text style={styles.navIcon}>📊</Text>
           <Text
-            style={[styles.navText, activeTab === 'analytics' && styles.navTextActive]}
+            style={[
+              styles.navText,
+              activeTab === 'analytics' && styles.navTextActive,
+            ]}
           >
             {t.analytics}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.navItem, activeTab === 'inventory' && styles.navItemActive]}
+          style={[
+            styles.navItem,
+            activeTab === 'inventory' && styles.navItemActive,
+          ]}
           onPress={() => setActiveTab('inventory')}
         >
           <Text style={styles.navIcon}>📦</Text>
           <Text
-            style={[styles.navText, activeTab === 'inventory' && styles.navItemActive]}
+            style={[
+              styles.navText,
+              activeTab === 'inventory' && styles.navTextActive,
+            ]}
           >
             {t.inventory}
           </Text>
@@ -290,19 +467,28 @@ export default function App() {
         >
           <Text style={styles.navIcon}>📜</Text>
           <Text
-            style={[styles.navText, activeTab === 'history' && styles.navTextActive]}
+            style={[
+              styles.navText,
+              activeTab === 'history' && styles.navTextActive,
+            ]}
           >
             {t.history}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.navItem, activeTab === 'settings' && styles.navItemActive]}
+          style={[
+            styles.navItem,
+            activeTab === 'settings' && styles.navItemActive,
+          ]}
           onPress={() => setActiveTab('settings')}
         >
           <Text style={styles.navIcon}>⚙️</Text>
           <Text
-            style={[styles.navText, activeTab === 'settings' && styles.navTextActive]}
+            style={[
+              styles.navText,
+              activeTab === 'settings' && styles.navTextActive,
+            ]}
           >
             {t.settings}
           </Text>
@@ -310,47 +496,131 @@ export default function App() {
       </View>
 
       {/* Printer Modal */}
-      <Modal visible={showPrinterModal} transparent animationType="slide">
+      <Modal
+        visible={showPrinterModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPrinterModal(false)}
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>🖨️ {t.connectPrinter}</Text>
+            {/* Header */}
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>🖨️ {t.connectPrinter}</Text>
+              {printerStatus === 'connected' && selectedPrinter && (
+                <TouchableOpacity
+                  style={styles.disconnectPrinterButton}
+                  onPress={handleDisconnectPrinter}
+                >
+                  <Text style={styles.disconnectPrinterText}>Disconnect</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
-            <TouchableOpacity
-              style={styles.scanButton}
-              onPress={handleScanPrinters}
-            >
-              <Text style={styles.scanButtonText}>
-                {printerStatus === 'searching' ? '🔄 ' : '🔍 '}
-                {t.scanPrinters}
+            {/* Status Info */}
+            <View style={styles.statusInfoContainer}>
+              <View
+                style={[
+                  styles.statusIndicator,
+                  {
+                    backgroundColor:
+                      printerStatus === 'connected'
+                        ? COLORS.success
+                        : COLORS.error,
+                  },
+                ]}
+              />
+              <Text style={styles.statusInfoText}>
+                {getPrinterStatusText()}
               </Text>
-            </TouchableOpacity>
+            </View>
 
+            {/* Error Display */}
+            {printerError && (
+              <View style={styles.errorBanner}>
+                <Text style={styles.errorBannerText}>⚠️ {printerError}</Text>
+              </View>
+            )}
+
+            {/* Scan Button */}
+            {printerStatus !== 'connected' && (
+              <TouchableOpacity
+                style={[
+                  styles.scanButton,
+                  isScanning && styles.scanButtonDisabled,
+                ]}
+                onPress={handleScanPrinters}
+                disabled={isScanning}
+              >
+                {isScanning ? (
+                  <>
+                    <ActivityIndicator
+                      size="small"
+                      color={COLORS.surface}
+                      style={styles.scanSpinner}
+                    />
+                    <Text style={styles.scanButtonText}>
+                      {t.scanning || 'Scanning...'}
+                    </Text>
+                  </>
+                ) : (
+                  <Text style={styles.scanButtonText}>
+                    🔍 {t.scanPrinters || 'Scan for Printers'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {/* Printer List */}
             <ScrollView style={styles.printerList}>
               {availablePrinters.length === 0 ? (
                 <Text style={styles.emptyText}>
-                  {printerStatus === 'searching'
-                    ? t.searching + '...'
-                    : t.noPrintersFound}
+                  {isScanning
+                    ? (t.searching || 'Searching') + '...'
+                    : t.noPrintersFound || 'No printers found'}
                 </Text>
               ) : (
                 availablePrinters.map((printer, index) => (
                   <TouchableOpacity
                     key={printer.address || index}
-                    style={styles.printerItem}
+                    style={[
+                      styles.printerItem,
+                      selectedPrinter?.address === printer.address &&
+                        styles.printerItemSelected,
+                    ]}
                     onPress={() => handleConnectPrinter(printer)}
+                    disabled={isConnecting}
                   >
-                    <Text style={styles.printerName}>{printer.name}</Text>
-                    <Text style={styles.printerAddress}>{printer.address}</Text>
+                    <View style={styles.printerItemContent}>
+                      <Text style={styles.printerName}>
+                        {printer.name || 'Unknown Printer'}
+                      </Text>
+                      <Text style={styles.printerAddress}>
+                        {printer.address || 'Unknown Address'}
+                      </Text>
+                    </View>
+                    {isConnecting &&
+                    selectedPrinter?.address === printer.address ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={COLORS.primary}
+                      />
+                    ) : (
+                      <Text style={styles.printerItemConnect}>→</Text>
+                    )}
                   </TouchableOpacity>
                 ))
               )}
             </ScrollView>
 
+            {/* Close Button */}
             <TouchableOpacity
               style={styles.closeButton}
               onPress={() => setShowPrinterModal(false)}
             >
-              <Text style={styles.closeButtonText}>{t.cancel}</Text>
+              <Text style={styles.closeButtonText}>
+                {t.close || 'Close'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -395,6 +665,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
   },
   printerEmoji: {
     fontSize: 24,
@@ -418,6 +690,7 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 16,
     color: COLORS.textLight,
+    marginTop: 12,
   },
   bottomNav: {
     flexDirection: 'row',
@@ -459,32 +732,89 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    padding: 20,
+    justifyContent: 'flex-end',
+    padding: 0,
   },
   modalContent: {
     backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    padding: 24,
-    maxHeight: '80%',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: '85%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: COLORS.text,
+    flex: 1,
+  },
+  disconnectPrinterButton: {
+    backgroundColor: COLORS.error,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  disconnectPrinterText: {
+    color: COLORS.surface,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  statusInfoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    padding: 12,
+    borderRadius: 8,
     marginBottom: 16,
-    textAlign: 'center',
+  },
+  statusIndicator: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 10,
+  },
+  statusInfoText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  errorBanner: {
+    backgroundColor: COLORS.error + '15',
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.error,
+    padding: 12,
+    borderRadius: 6,
+    marginBottom: 16,
+  },
+  errorBannerText: {
+    fontSize: 13,
+    color: COLORS.error,
+    fontWeight: '500',
   },
   scanButton: {
     backgroundColor: COLORS.primary,
-    padding: 16,
+    padding: 14,
     borderRadius: 8,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
     marginBottom: 16,
+  },
+  scanButtonDisabled: {
+    backgroundColor: COLORS.primary + '80',
+  },
+  scanSpinner: {
+    marginRight: 8,
   },
   scanButtonText: {
     color: COLORS.surface,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
   },
   printerList: {
@@ -492,33 +822,55 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   printerItem: {
-    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 14,
     borderRadius: 8,
     backgroundColor: COLORS.background,
-    marginBottom: 8,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  printerItemSelected: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primary + '10',
+  },
+  printerItemContent: {
+    flex: 1,
   },
   printerName: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '600',
     color: COLORS.text,
     marginBottom: 4,
   },
   printerAddress: {
-    fontSize: 14,
+    fontSize: 13,
     color: COLORS.textLight,
+  },
+  printerItemConnect: {
+    fontSize: 18,
+    color: COLORS.primary,
+    marginLeft: 12,
   },
   emptyText: {
     textAlign: 'center',
-    fontSize: 16,
+    fontSize: 15,
     color: COLORS.textLight,
     paddingVertical: 40,
   },
   closeButton: {
-    padding: 16,
+    paddingVertical: 14,
     alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    marginHorizontal: -20,
+    marginBottom: -20,
+    paddingHorizontal: 20,
   },
   closeButtonText: {
-    color: COLORS.textLight,
+    color: COLORS.primary,
     fontSize: 16,
     fontWeight: '600',
   },
