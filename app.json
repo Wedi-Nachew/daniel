@@ -28,10 +28,7 @@
       }
     },
     "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffa62b"
-      },
+      "icon": "./assets/icon.png",
       "package": "com.millreceiptpro.app",
       "permissions": [
         "BLUETOOTH",
@@ -51,6 +48,14 @@
     "scheme": "millreceiptpro",
     "plugins": [
       "expo-router"
-    ]
+    ],
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "f048c5bd-5234-4098-8e92-b950bcd320b2"
+      }
+    }
   }
 }
