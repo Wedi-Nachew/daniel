@@ -39,6 +39,7 @@ import InventoryScreen from '../components/InventoryScreen';
 import InventoryBillingScreen from '../components/InventoryBillingScreen';
 import LicenseScreen from '../components/LicenseScreen';
 import { checkLicense } from '../utils/license';
+import BluetoothTestScreen from '../utils/BluetoothTestScreen';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('billing');
@@ -387,6 +388,8 @@ export default function App() {
             translations={t}
           />
         );
+      case 'bluetooth':
+        return <BluetoothTestScreen />;
       default:
         return null;
     }
@@ -477,6 +480,25 @@ export default function App() {
             ]}
           >
             {t.inventory}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.navItem,
+            activeTab === 'bluetooth' && styles.navItemActive,
+          ]}
+          onPress={() => setActiveTab('bluetooth')}
+        >
+          <Text style={styles.navIcon}>🛜</Text>
+          <Text style={styles.navText}>Bluetooth</Text>
+          <Text
+            style={[
+              styles.navText,
+              activeTab === 'bluetooth' && styles.navTextActive,
+            ]}
+          >
+            {t.bluetooth}
           </Text>
         </TouchableOpacity>
 

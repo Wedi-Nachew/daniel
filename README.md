@@ -14,14 +14,14 @@ A professional, production-ready mobile application for local mill houses in Eri
 
 ## Tech Stack 🛠️
 
-- **React Native**: 0.74.0
+- **React Native**: 0.74.5
 - **Expo**: ~51.0.0
 - **Expo Router**: ~3.5.0
 - **React Native Paper**: Material Design components
 - **AsyncStorage**: Local data persistence
 - **Expo Crypto**: Secure PIN hashing
 - **date-fns**: Date manipulation
-- **react-native-esc-pos-printer**: Bluetooth thermal printer integration
+- **@conodene/react-native-thermal-receipt-printer-image-qr**: Bluetooth thermal printer integration (BLE-enabled)
 
 ## Prerequisites 📋
 
@@ -133,42 +133,61 @@ Error: #EF4444 (Red)
 
 ## Bluetooth Printer Setup 🖨️
 
+### 📚 Full Documentation
+For complete Bluetooth printer documentation, see:
+- **[BLUETOOTH_PRINTER_SETUP.md](BLUETOOTH_PRINTER_SETUP.md)** - Complete setup guide, troubleshooting, and API reference
+- **[BLUETOOTH_QUICK_REFERENCE.md](BLUETOOTH_QUICK_REFERENCE.md)** - Quick start guide and common tasks
+
 ### Supported Printers
 
-This app uses `react-native-esc-pos-printer` which supports:
+This app uses `@conodene/react-native-thermal-receipt-printer-image-qr` v0.1.87 which supports:
 - ESC/POS standard thermal printers
-- Bluetooth, USB, and Network connectivity
-- 58mm thermal paper (optimized)
+- Bluetooth Low Energy (BLE) connectivity
+- 58mm and 80mm thermal paper
+- Tested models: MUNBYN, Rongta, Xprinter, GOOJPRT
 
-### Connecting a Printer
+### Connecting a Printer (Quick Start)
 
-1. Tap the printer icon (🖨️) in the top-right corner
-2. Tap "Scan Printers" to search for available Bluetooth printers
-3. Select your printer from the list
-4. Status dot will turn green when connected
+1. **Enable Bluetooth** on your device and turn on your thermal printer
+2. Tap the **🖨️ printer icon** in the top-right corner
+3. Tap **"🔍 Scan for Printers"** button (grant permissions if prompted)
+4. **Select your printer** from the list
+5. **Green dot** = Connected and ready to print!
+
+### Status Indicators
+
+| Color | Status | Meaning |
+|-------|--------|---------|
+| 🟢 Green | Connected | Ready to print |
+| 🔴 Red | Disconnected | No printer connected |
+| 🟡 Yellow | Scanning/Connecting | Operation in progress |
 
 ### Android Permissions
 
-The app automatically requests the following permissions on Android:
-- Android 12+: `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT`, `ACCESS_FINE_LOCATION`
-- Android 11 and below: `BLUETOOTH`, `BLUETOOTH_ADMIN`, `ACCESS_FINE_LOCATION`
+The app automatically requests the following permissions:
+- **Android 12+**: `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT`, `ACCESS_FINE_LOCATION`
+- **Android 11 and below**: `BLUETOOTH`, `BLUETOOTH_ADMIN`, `ACCESS_FINE_LOCATION`
 
-### Troubleshooting Printer Issues
+All permissions are pre-configured in `AndroidManifest.xml`.
 
-**No printers found:**
-- Ensure Bluetooth is enabled on your device
-- Make sure the printer is powered on and in pairing mode
-- Check that location permissions are granted (required for Bluetooth scanning on Android)
+### Diagnostic Tools
 
-**Connection fails:**
-- Unpair the printer from device Bluetooth settings and try again
-- Restart the printer
-- Ensure the printer is not connected to another device
+Access the **Bluetooth Diagnostic Screen** via the bottom navigation:
+- Step-by-step testing (Permissions → Bluetooth → Scan → Connect)
+- Live operation logs
+- Connection verification
+- Test page printing
 
-**Print doesn't work:**
-- Verify printer status shows green dot (connected)
-- Check printer has paper loaded
-- Ensure printer supports ESC/POS commands
+### Troubleshooting Quick Fixes
+
+| Problem | Solution |
+|---------|----------|
+| No printers found | 1. Enable Bluetooth<br>2. Turn on printer<br>3. Move closer to printer |
+| Can't connect | 1. Restart printer<br>2. Unpair from system Bluetooth<br>3. Try scanning again |
+| Print fails | 1. Check green dot (connected)<br>2. Verify printer has paper<br>3. Print test page first |
+| No permissions | Settings → Apps → Mill Receipt Pro → Permissions → Enable Bluetooth |
+
+For detailed troubleshooting and advanced features, see [BLUETOOTH_PRINTER_SETUP.md](BLUETOOTH_PRINTER_SETUP.md).
 
 ## Usage Guide 📖
 
@@ -357,8 +376,9 @@ npx react-native start --reset-cache
 ## Known Limitations ⚠️
 
 1. **Bluetooth Printer**: Requires physical testing with real printer (simulator won't work)
-2. **Expo Go**: Bluetooth printing only works in development builds, not Expo Go
+2. **Development Build Required**: Bluetooth printing requires `npx expo run:android` (Expo Go doesn't support native BLE modules)
 3. **Platform-Specific**: Some features may behave differently on iOS vs Android
+4. **Printer Compatibility**: Only ESC/POS compatible BLE thermal printers are supported
 
 ## Support & Contact 📞
 
@@ -391,7 +411,7 @@ Built with:
 - React Native & Expo
 - React Native Paper
 - Expo ecosystem libraries
-- react-native-esc-pos-printer
+- @conodene/react-native-thermal-receipt-printer-image-qr
 - Open source community
 
 ---
