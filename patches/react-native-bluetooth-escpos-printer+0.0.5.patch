@@ -1,0 +1,79 @@
+diff --git a/node_modules/react-native-bluetooth-escpos-printer/android/build.gradle b/node_modules/react-native-bluetooth-escpos-printer/android/build.gradle
+index d86e4f5..7d7784c 100644
+--- a/node_modules/react-native-bluetooth-escpos-printer/android/build.gradle
++++ b/node_modules/react-native-bluetooth-escpos-printer/android/build.gradle
+@@ -1,60 +1,32 @@
+ buildscript {
+     repositories {
+-        jcenter { url "http://jcenter.bintray.com/" }
+-        maven {url "http://repo.spring.io/plugins-release/"}
++        google()
+         mavenCentral()
+-        maven {
+-            // All of React Native (JS, Obj-C sources, Android binaries) is installed from npm
+-            url "$rootDir/../node_modules/react-native/android"
+-        }
+-        maven {
+-            url 'https://maven.google.com'
+-        }
+-    }
+-
+-    dependencies {
+-        classpath 'com.android.tools.build:gradle:3.1.4'
+     }
+ }
+ 
+ apply plugin: 'com.android.library'
++apply plugin: 'kotlin-android'
+ 
+ android {
+-    compileSdkVersion 27
+-    buildToolsVersion "27.0.3"
++    compileSdk 34
+     
+     defaultConfig {
+-        minSdkVersion 16
+-        targetSdkVersion 24
+-        versionCode 1
+-        versionName "1.0"
+-    }
+-    lintOptions {
+-        abortOnError false
++        minSdk 21
++        targetSdk 34
+     }
+-    sourceSets {
+-        main {
+-            aidl.srcDirs = ['src/main/java']
+-        }
+-    }
+-}
+     
+-repositories {
+-    jcenter { url "http://jcenter.bintray.com/" }
+-    maven {url "http://repo.spring.io/plugins-release/"}
+-    mavenCentral()
+-    maven {
+-        // All of React Native (JS, Obj-C sources, Android binaries) is installed from npm
+-        url "$rootDir/../node_modules/react-native/android"
++    compileOptions {
++        sourceCompatibility JavaVersion.VERSION_11
++        targetCompatibility JavaVersion.VERSION_11
+     }
+-    maven {
+-        url 'https://maven.google.com'
++    
++    kotlinOptions {
++        jvmTarget = '11'
+     }
+ }
+ 
+ dependencies {
+-    compile fileTree(dir: 'libs', include: ['*.jar'])
+-    implementation 'com.facebook.react:react-native:+'  // From node_modules
+-    implementation group: 'com.android.support', name: 'support-v4', version: '27.0.0'
+-    implementation "com.google.zxing:core:3.3.0"
++    implementation 'androidx.appcompat:appcompat:1.6.1'
++    implementation 'androidx.core:core:1.12.0'
+ }
+\ No newline at end of file

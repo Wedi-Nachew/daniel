@@ -71,25 +71,37 @@ export default function App() {
 
   // Check Bluetooth status periodically
   useEffect(() => {
+    let interval;
     const checkBluetooth = async () => {
       try {
         const enabled = await isBluetoothEnabled();
         setBluetoothEnabled(enabled);
-
-        // Update printer status based on Bluetooth state
-        if (!enabled && printerStatus === 'connected') {
-          setPrinterStatus('disconnected');
-          setPrinterError('Bluetooth was disabled');
+  
+        if (!enabled) {
+          // Stop scanning immediately if Bluetooth was turned off
+          if (isScanning) setIsScanning(false);
+  
+          // Reset connection state if Bluetooth is off
+          if (printerStatus === 'connected') {
+            setPrinterStatus('disconnected');
+            setSelectedPrinter(null);
+            setPrinterError('Bluetooth was disabled');
+          }
         }
       } catch (error) {
         console.warn('Bluetooth check error:', error);
       }
     };
-
+  
+    // Initial check
     checkBluetooth();
-    const interval = setInterval(checkBluetooth, 5000);
+  
+    // Re-check every 3 seconds for smoother UI feedback
+    interval = setInterval(checkBluetooth, 3000);
+  
     return () => clearInterval(interval);
-  }, [printerStatus]);
+  }, [printerStatus, isScanning]);
+  
 
   const initializeApp = async () => {
     try {
@@ -152,9 +164,16 @@ export default function App() {
   };
 
   const handleScanPrinters = async () => {
-    setIsScanning(true);
-    setPrinterError(null);
-    setAvailablePrinters([]);
+    const enabled = await isBluetoothEnabled();
+  if (!enabled) {
+    Alert.alert('Bluetooth Disabled', 'Please enable Bluetooth to scan for printers.');
+    setBluetoothEnabled(false);
+    return;
+  }
+
+  setIsScanning(true);
+  setPrinterError(null);
+  setAvailablePrinters([]);
 
     try {
       const result = await scanForPrinters();

@@ -1,35 +1,25 @@
 import { Platform, PermissionsAndroid, Alert } from 'react-native';
 import { format } from 'date-fns';
 import {
+  BLEPrinter,
+  BluetoothManager,
+} from '@conodene/react-native-thermal-receipt-printer-image-qr';
+import {
   loadSavedPrinter,
   saveSavedPrinter,
   clearSavedPrinter,
 } from './storage';
 
-// Platform-specific Bluetooth module
-let BluetoothManager;
-let BluetoothEscposPrinter;
-
-try {
-  if (Platform.OS === 'android' || Platform.OS === 'ios') {
-    const printerModule = require('react-native-bluetooth-escpos-printer');
-    BluetoothManager = printerModule.BluetoothManager;
-    BluetoothEscposPrinter = printerModule.BluetoothEscposPrinter;
-  }
-} catch (error) {
-  console.warn('Bluetooth module not available:', error.message);
-}
-
-// ESC/POS encoding
-const ESC = '\x1B';
-const ESC_POS_OPTIONS = { encoding: 'UTF-8' };
-
+let bleInitialized = false;
 let activePrinter = null;
 let connectionTimeout = null;
 
-// ============================================
-// UTILITY FUNCTIONS
-// ============================================
+export const getModuleStatus = () => ({
+  available: !!BluetoothManager && !!BLEPrinter,
+  message: !!BluetoothManager && !!BLEPrinter
+    ? 'Thermal printer module ready'
+    : 'Thermal printer module not available. Ensure react-native-thermal-receipt-printer-image-qr is installed and linked.',
+});
 
 const normalizePrinter = (printer = {}) => {
   if (!printer) {
@@ -43,35 +33,27 @@ const normalizePrinter = (printer = {}) => {
   }
 
   const address =
-    printer.address ||
-    printer.macAddress ||
-    printer.deviceAddress ||
-    printer.target ||
     printer.inner_mac_address ||
+    printer.address ||
+    printer.target ||
+    printer.macAddress ||
     printer.id ||
     null;
 
   const name =
-    printer.name ||
     printer.device_name ||
+    printer.name ||
     printer.deviceName ||
     printer.model ||
     'Unknown Printer';
 
   return {
-    id: printer.id || address || printer.serialNumber || null,
+    id: printer.id || address || printer.target || printer.inner_mac_address || null,
     name,
     address,
     type: 'bluetooth',
     raw: printer,
   };
-};
-
-const toBoolean = (value) => {
-  if (typeof value === 'boolean') return value;
-  if (typeof value === 'string') return value.toLowerCase() === 'true';
-  if (typeof value === 'number') return value === 1;
-  return false;
 };
 
 const parseScanResult = (result) => {
@@ -92,6 +74,74 @@ const parseScanResult = (result) => {
   return [...found, ...paired];
 };
 
+const ensureBleInitialized = async () => {
+  if (bleInitialized) {
+    return true;
+  }
+
+  if (!BLEPrinter || !BLEPrinter.init) {
+    throw new Error('BLEPrinter module is not available');
+  }
+
+  try {
+    await BLEPrinter.init();
+    bleInitialized = true;
+    return true;
+  } catch (error) {
+    bleInitialized = false;
+    throw error;
+  }
+};
+
+const toBoolean = (value) => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value === 1;
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    return ['true', '1', 'on', 'enabled', 'yes'].includes(normalized);
+  }
+
+  return false;
+};
+
+const requestBluetoothPermissions = async () => {
+  if (Platform.OS !== 'android') {
+    return true;
+  }
+
+  try {
+    const apiLevel = Platform.Version;
+
+    if (apiLevel >= 31) {
+      const granted = await PermissionsAndroid.requestMultiple([
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+      ]);
+
+      return (
+        granted['android.permission.BLUETOOTH_SCAN'] === PermissionsAndroid.RESULTS.GRANTED &&
+        granted['android.permission.BLUETOOTH_CONNECT'] === PermissionsAndroid.RESULTS.GRANTED
+      );
+    }
+
+    const granted = await PermissionsAndroid.requestMultiple([
+      PermissionsAndroid.PERMISSIONS.BLUETOOTH,
+      PermissionsAndroid.PERMISSIONS.BLUETOOTH_ADMIN,
+      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+    ]);
+
+    return (
+      granted['android.permission.BLUETOOTH'] === PermissionsAndroid.RESULTS.GRANTED &&
+      granted['android.permission.BLUETOOTH_ADMIN'] === PermissionsAndroid.RESULTS.GRANTED
+    );
+  } catch (error) {
+    console.warn('Permission error:', error);
+    return false;
+  }
+};
+
 const clearConnectionTimeout = () => {
   if (connectionTimeout) {
     clearTimeout(connectionTimeout);
@@ -99,96 +149,69 @@ const clearConnectionTimeout = () => {
   }
 };
 
-// ============================================
-// BLUETOOTH STATUS
-// ============================================
-
 export const getActivePrinter = () => activePrinter;
 
 export const isBluetoothEnabled = async () => {
   try {
-    if (!BluetoothManager) {
-      console.warn('BluetoothManager not available');
+    const permissionGranted = await requestBluetoothPermissions();
+    if (!permissionGranted) {
+      console.warn('Bluetooth permission not granted.');
       return false;
     }
+
     const enabled = await BluetoothManager.isBluetoothEnabled();
     return toBoolean(enabled);
   } catch (error) {
     console.warn('Bluetooth check failed:', error);
+
+    if (
+      error &&
+      typeof error.message === 'string' &&
+      error.message.includes('android.permission.BLUETOOTH_CONNECT')
+    ) {
+      try {
+        const granted = await requestBluetoothPermissions();
+        if (granted) {
+          const enabled = await BluetoothManager.isBluetoothEnabled();
+          return toBoolean(enabled);
+        }
+      } catch (retryError) {
+        console.warn('Bluetooth retry failed:', retryError);
+      }
+    }
+
     return false;
   }
 };
 
-export const requestBluetoothPermissions = async () => {
-  if (Platform.OS === 'android') {
-    try {
-      const apiLevel = Platform.Version;
-
-      if (apiLevel >= 31) {
-        // Android 12+
-        const granted = await PermissionsAndroid.requestMultiple([
-          PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-          PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-        ]);
-
-        return (
-          granted['android.permission.BLUETOOTH_SCAN'] ===
-            PermissionsAndroid.RESULTS.GRANTED &&
-          granted['android.permission.BLUETOOTH_CONNECT'] ===
-            PermissionsAndroid.RESULTS.GRANTED
-        );
-      } else {
-        // Android 11 and below
-        const granted = await PermissionsAndroid.requestMultiple([
-          PermissionsAndroid.PERMISSIONS.BLUETOOTH,
-          PermissionsAndroid.PERMISSIONS.BLUETOOTH_ADMIN,
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-        ]);
-
-        return (
-          granted['android.permission.BLUETOOTH'] ===
-            PermissionsAndroid.RESULTS.GRANTED &&
-          granted['android.permission.BLUETOOTH_ADMIN'] ===
-            PermissionsAndroid.RESULTS.GRANTED
-        );
-      }
-    } catch (err) {
-      console.warn('Permission error:', err);
-      return false;
-    }
-  }
-  return true; // iOS doesn't need runtime permissions
-};
-
 const ensureBluetoothEnabled = async () => {
   try {
-    if (!BluetoothManager) {
-      console.warn('BluetoothManager not available');
+    const permissionGranted = await requestBluetoothPermissions();
+    if (!permissionGranted) {
+      console.warn('Bluetooth permissions not granted while ensuring Bluetooth status.');
       return false;
     }
 
     const enabled = await BluetoothManager.isBluetoothEnabled();
-    if (toBoolean(enabled)) {
-      return true;
+    const isOn = toBoolean(enabled);
+
+    if (isOn) return true;
+
+    // 🚫 On Android 12+, enableBluetooth() no longer works silently.
+    // Let the user manually turn it on via prompt instead.
+    if (Platform.OS === 'android') {
+      Alert.alert(
+        'Bluetooth Disabled',
+        'Please enable Bluetooth from quick settings and try again.'
+      );
     }
 
-    try {
-      await BluetoothManager.enableBluetooth();
-      return true;
-    } catch (error) {
-      console.warn('Enable Bluetooth failed:', error);
-      return false;
-    }
+    return false;
   } catch (error) {
     console.warn('Bluetooth check error:', error);
     return false;
   }
 };
-
-// ============================================
-// SCANNING
-// ============================================
 
 export const scanForPrinters = async () => {
   const baseResult = {
@@ -199,30 +222,26 @@ export const scanForPrinters = async () => {
   };
 
   try {
-    if (!BluetoothManager) {
-      return { ...baseResult, error: new Error('BluetoothManager not available') };
-    }
-
-    // Check permissions
     const hasPermission = await requestBluetoothPermissions();
     if (!hasPermission) {
       return { ...baseResult, permissionGranted: false };
     }
 
-    // Ensure Bluetooth is on
-    const bluetoothOn = await ensureBluetoothEnabled();
+    const enabled = await BluetoothManager.isBluetoothEnabled();
+    const bluetoothOn = toBoolean(enabled);
+
     if (!bluetoothOn) {
       return { ...baseResult, bluetoothEnabled: false };
     }
 
-    // Scan for devices
-    const devicesRaw = await BluetoothManager.scanDevices();
-    const devices = parseScanResult(devicesRaw);
+    await ensureBleInitialized();
+
+    const scanResult = await BluetoothManager.scanDevices();
+    const devices = parseScanResult(scanResult);
     const normalized = devices
       .map((device) => normalizePrinter(device))
       .filter((printer) => !!printer.address);
 
-    // Remove duplicates
     const seen = new Set();
     const uniquePrinters = [];
 
@@ -234,7 +253,6 @@ export const scanForPrinters = async () => {
     }
 
     console.log('Found printers:', uniquePrinters);
-
     return { ...baseResult, printers: uniquePrinters };
   } catch (error) {
     console.error('Scan error:', error);
@@ -242,38 +260,30 @@ export const scanForPrinters = async () => {
   }
 };
 
-// ============================================
-// CONNECTION MANAGEMENT
-// ============================================
 
 export const connectToPrinter = async (printer) => {
   clearConnectionTimeout();
 
   try {
-    if (!BluetoothManager || !BluetoothEscposPrinter) {
-      throw new Error('Bluetooth modules not available');
-    }
-
     const normalized = normalizePrinter(printer);
 
     if (!normalized.address) {
       throw new Error('Invalid printer selected');
     }
 
-    // Ensure Bluetooth is on
     const bluetoothOn = await ensureBluetoothEnabled();
     if (!bluetoothOn) {
       throw new Error('Bluetooth is disabled');
     }
 
-    // Set connection timeout
-    const connectPromise = BluetoothManager.connect(normalized.address);
+    await ensureBleInitialized();
+
+    const connectPromise = BLEPrinter.connectPrinter(normalized.address);
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('Connection timeout')), 10000)
     );
 
     await Promise.race([connectPromise, timeoutPromise]);
-    await BluetoothEscposPrinter.printerInit();
 
     activePrinter = normalized;
     await saveSavedPrinter(activePrinter);
@@ -294,11 +304,7 @@ export const disconnectPrinter = async () => {
   clearConnectionTimeout();
 
   try {
-    if (!BluetoothManager) {
-      return false;
-    }
-
-    await BluetoothManager.disconnect();
+    await BLEPrinter.closeConn();
     console.log('Disconnected from printer');
     activePrinter = null;
     await clearSavedPrinter();
@@ -328,6 +334,7 @@ export const autoConnectSavedPrinter = async () => {
       return { connected: true, printer: connected };
     }
 
+    await clearSavedPrinter();
     return { connected: false, reason: 'failed_to_connect' };
   } catch (error) {
     console.error('Auto-connect error:', error);
@@ -344,156 +351,96 @@ const ensurePrinterConnection = async () => {
   return result.connected;
 };
 
-// ============================================
-// PRINTING FUNCTIONS
-// ============================================
-
 const escapeText = (text) => {
   if (!text) return '';
-  // Remove special characters that could break ESC/POS
-  return String(text).replace(/[^\x20-\x7E]/g, '?');
+  return String(text).replace(/[^\x20-\x7E\n]/g, '?').trim();
 };
 
 const formatLineItem = (item) => {
   const maxNameLen = 24;
-  const name = escapeText(item.name).slice(0, maxNameLen).padEnd(maxNameLen);
-  const qty = escapeText(item.qty);
-  const price = escapeText(item.price);
-  const total = escapeText(item.total);
-  return `${name}\n  ${qty} x ${price}    ${total}\n`;
+  const name = escapeText(item.name || '').slice(0, maxNameLen).padEnd(maxNameLen);
+  const qty = escapeText(String(item.qty || '0'));
+  const price = escapeText(String(item.price || '0'));
+  const total = escapeText(String(item.total || '0'));
+  return `${name}\n  ${qty} x ${price}    ${total}`;
 };
 
 export const printReceipt = async (receipt, business, isCopy = false) => {
   try {
-    if (!BluetoothEscposPrinter) {
-      throw new Error('Printer module not available');
-    }
-
     const isConnected = await ensurePrinterConnection();
     if (!isConnected) {
-      throw new Error('No printer connected');
+      Alert.alert('Print Error', 'No printer connected. Please connect to a printer first.');
+      return false;
     }
 
     const formattedDate = format(new Date(receipt.date), 'MM/dd/yyyy HH:mm');
-    const businessName = escapeText(business.name || 'Receipt');
 
-    // Initialize printer
-    await BluetoothEscposPrinter.printerInit();
+    let receiptText = '';
 
-    // Header
-    await BluetoothEscposPrinter.printerAlign(BluetoothEscposPrinter.ALIGN.CENTER);
-    await BluetoothEscposPrinter.printText(`${businessName}\n`, ESC_POS_OPTIONS);
+    receiptText += `[C]<font size='big'>${escapeText(business.name || 'Mill House')}</font>\n`;
+    if (business.phone) receiptText += `[C]${escapeText(business.phone)}\n`;
+    if (business.address) receiptText += `[C]${escapeText(business.address)}\n`;
+    receiptText += `[C]================================\n\n`;
 
-    if (business.phone) {
-      await BluetoothEscposPrinter.printText(
-        `${escapeText(business.phone)}\n`,
-        ESC_POS_OPTIONS
-      );
-    }
+    receiptText += `[L]Receipt #: ${escapeText((receipt.id || '').slice(-8))}\n`;
+    receiptText +=(`[L]Date: ${formattedDate}\n`);
+    receiptText += `[C]--------------------------------\n`;
 
-    if (business.address) {
-      await BluetoothEscposPrinter.printText(
-        `${escapeText(business.address)}\n`,
-        ESC_POS_OPTIONS
-      );
-    }
-
-    await BluetoothEscposPrinter.printText('==============================\n', ESC_POS_OPTIONS);
-
-    // Receipt info
-    await BluetoothEscposPrinter.printerAlign(BluetoothEscposPrinter.ALIGN.LEFT);
-    await BluetoothEscposPrinter.printText(
-      `Receipt #: ${receipt.id.slice(-8)}\n`,
-      ESC_POS_OPTIONS
-    );
-    await BluetoothEscposPrinter.printText(`Date: ${formattedDate}\n`, ESC_POS_OPTIONS);
-    await BluetoothEscposPrinter.printText('------------------------------\n', ESC_POS_OPTIONS);
-
-    // Copy indicator
     if (isCopy) {
-      await BluetoothEscposPrinter.printerAlign(BluetoothEscposPrinter.ALIGN.CENTER);
-      await BluetoothEscposPrinter.printText('*** COPY ***\n', ESC_POS_OPTIONS);
-      await BluetoothEscposPrinter.printText('------------------------------\n', ESC_POS_OPTIONS);
-      await BluetoothEscposPrinter.printerAlign(BluetoothEscposPrinter.ALIGN.LEFT);
+      receiptText += `[C]<font size='big'>*** COPY ***</font>\n`;
+      receiptText += `[C]--------------------------------\n`;
     }
 
-    // Line items
-    if (receipt.lines && Array.isArray(receipt.lines)) {
+    if (Array.isArray(receipt.lines)) {
       for (const item of receipt.lines) {
-        await BluetoothEscposPrinter.printText(
-          formatLineItem(item),
-          ESC_POS_OPTIONS
-        );
+        receiptText += `[L]${escapeText(item.name || '')}\n`;
+        receiptText += `[L]  ${escapeText(String(item.qty || '0'))} x ${escapeText(String(item.price || '0'))}    ${escapeText(String(item.total || '0'))}\n`;
       }
     }
 
-    // Total
-    await BluetoothEscposPrinter.printText('==============================\n', ESC_POS_OPTIONS);
-    await BluetoothEscposPrinter.printText(
-      `Total: ${escapeText(receipt.total)}\n`,
-      { ...ESC_POS_OPTIONS, fonttype: 1 }
-    );
+    receiptText += `[C]================================\n`;
+    receiptText += `[L]<font size='big'>Total: ${escapeText(String(receipt.total || '0'))}</font>\n`;
+    receiptText += `[C]================================\n`;
+    receiptText += `[C]Thank you!\n\n\n`;
 
-    // Footer
-    await BluetoothEscposPrinter.printerAlign(BluetoothEscposPrinter.ALIGN.CENTER);
-    await BluetoothEscposPrinter.printText('==============================\n', ESC_POS_OPTIONS);
-    await BluetoothEscposPrinter.printText('Thank you!\n\n\n', ESC_POS_OPTIONS);
-
-    await BluetoothEscposPrinter.printAndFeed(2);
-
+    await BLEPrinter.printText(receiptText);
     console.log('Receipt printed successfully');
     return true;
   } catch (error) {
     console.error('Print error:', error);
-    throw error;
+    Alert.alert('Print Error', 'Failed to print receipt. Please check printer connection.');
+    return false;
   }
 };
 
 export const printTestPage = async (business = {}) => {
   try {
-    if (!BluetoothEscposPrinter) {
-      throw new Error('Printer module not available');
-    }
-
     const isConnected = await ensurePrinterConnection();
     if (!isConnected) {
-      throw new Error('No printer connected');
+      Alert.alert('Test Print Failed', 'Connect to a printer before printing a test page.');
+      return false;
     }
 
     const now = format(new Date(), 'MM/dd/yyyy HH:mm');
     const printer = activePrinter || (await loadSavedPrinter());
 
-    await BluetoothEscposPrinter.printerInit();
+    let text = '';
+    text += `[C]<font size='big'>${escapeText(business.name || 'Mill Receipt Pro')}</font>\n`;
+    text += `[C]==============================\n`;
+    text += `[C]Bluetooth Test Print\n`;
+    text += `[C]${now}\n`;
+    text += `[C]------------------------------\n`;
+    text += `[L]Printer: ${escapeText(printer?.name || 'Unknown')}\n`;
+    text +=(`[L]Address: ${escapeText(printer?.address || 'N/A')}\n`);
+    text += `[L]Status: CONNECTION VERIFIED\n`;
+    text += `[C]==============================\n`;
+    text += `[C]Thank you!\n\n`;
 
-    await BluetoothEscposPrinter.printerAlign(BluetoothEscposPrinter.ALIGN.CENTER);
-    await BluetoothEscposPrinter.printText(
-      `${escapeText(business.name || 'Mill Receipt Pro')}\n`,
-      ESC_POS_OPTIONS
-    );
-    await BluetoothEscposPrinter.printText('==============================\n', ESC_POS_OPTIONS);
-    await BluetoothEscposPrinter.printText('Bluetooth Test Print\n', ESC_POS_OPTIONS);
-    await BluetoothEscposPrinter.printText(`${now}\n`, ESC_POS_OPTIONS);
-    await BluetoothEscposPrinter.printText('------------------------------\n', ESC_POS_OPTIONS);
-
-    await BluetoothEscposPrinter.printerAlign(BluetoothEscposPrinter.ALIGN.LEFT);
-    await BluetoothEscposPrinter.printText(
-      `Printer: ${escapeText(printer?.name || 'Unknown')}\n`,
-      ESC_POS_OPTIONS
-    );
-    await BluetoothEscposPrinter.printText(
-      `Address: ${escapeText(printer?.address || 'N/A')}\n`,
-      ESC_POS_OPTIONS
-    );
-    await BluetoothEscposPrinter.printText('Status: CONNECTION VERIFIED\n', ESC_POS_OPTIONS);
-
-    await BluetoothEscposPrinter.printerAlign(BluetoothEscposPrinter.ALIGN.CENTER);
-    await BluetoothEscposPrinter.printText('==============================\n', ESC_POS_OPTIONS);
-    await BluetoothEscposPrinter.printText('Thank you!\n\n', ESC_POS_OPTIONS);
-
-    await BluetoothEscposPrinter.printAndFeed(2);
+    await BLEPrinter.printText(text);
     return true;
   } catch (error) {
     console.error('Test print error:', error);
-    throw error;
+    Alert.alert('Test Print Failed', 'Unable to print test page.');
+    return false;
   }
 };
