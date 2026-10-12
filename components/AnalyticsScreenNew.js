@@ -89,6 +89,14 @@ export default function AnalyticsScreenNew({ receipts, translations }) {
     const totalReceipts = filtered.length;
     const totalRevenue = filtered.reduce((sum, r) => sum + parseFloat(r.total), 0);
 
+    // Unpaid receipts analysis
+    const paidReceipts = filtered.filter(r => r.is_paid);
+    const unpaidReceipts = filtered.filter(r => !r.is_paid || (r.unpaid_amount && r.unpaid_amount > 0));
+    const paidRevenue = paidReceipts.reduce((sum, r) => sum + parseFloat(r.paid_amount || r.total), 0);
+    const unpaidRevenue = unpaidReceipts.reduce((sum, r) => sum + parseFloat(r.unpaid_amount || 0), 0);
+    const totalPaidAmount = filtered.reduce((sum, r) => sum + parseFloat(r.paid_amount || 0), 0);
+    const totalUnpaidAmount = filtered.reduce((sum, r) => sum + parseFloat(r.unpaid_amount || 0), 0);
+
     // Service aggregation
     const serviceMap = {};
     filtered.forEach(receipt => {
@@ -103,7 +111,19 @@ export default function AnalyticsScreenNew({ receipts, translations }) {
 
     const topServices = Object.values(serviceMap).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
 
-    return { totalReceipts, totalRevenue, topServices, filtered };
+    return { 
+      totalReceipts, 
+      totalRevenue, 
+      topServices, 
+      filtered,
+      // Unpaid receipts data
+      paidReceipts: paidReceipts.length,
+      unpaidReceipts: unpaidReceipts.length,
+      paidRevenue,
+      unpaidRevenue,
+      totalPaidAmount,
+      totalUnpaidAmount,
+    };
   };
 
   const getHourlyBreakdown = () => {
@@ -339,6 +359,34 @@ export default function AnalyticsScreenNew({ receipts, translations }) {
             <Text style={styles.statEmoji}>💰</Text>
             <Text style={styles.statValue}>{stats.totalRevenue.toFixed(2)}</Text>
             <Text style={styles.statLabel}>{t.revenue}</Text>
+          </View>
+        </View>
+
+        {/* Payment Status Cards */}
+        <View style={styles.statsRow}>
+          <View style={[styles.statCard, { backgroundColor: COLORS.success }]}>
+            <Text style={styles.statEmoji}>✅</Text>
+            <Text style={styles.statValue}>{stats.paidReceipts}</Text>
+            <Text style={styles.statLabel}>{t.paidReceipts || 'Paid'}</Text>
+          </View>
+          <View style={[styles.statCard, { backgroundColor: COLORS.warning }]}>
+            <Text style={styles.statEmoji}>⏳</Text>
+            <Text style={styles.statValue}>{stats.unpaidReceipts}</Text>
+            <Text style={styles.statLabel}>{t.unpaidReceipts || 'Unpaid'}</Text>
+          </View>
+        </View>
+
+        {/* Payment Amount Cards */}
+        <View style={styles.statsRow}>
+          <View style={[styles.statCard, { backgroundColor: COLORS.success }]}>
+            <Text style={styles.statEmoji}>💵</Text>
+            <Text style={styles.statValue}>{stats.totalPaidAmount.toFixed(2)}</Text>
+            <Text style={styles.statLabel}>{t.paidAmount || 'Paid Amount'}</Text>
+          </View>
+          <View style={[styles.statCard, { backgroundColor: COLORS.error }]}>
+            <Text style={styles.statEmoji}>💸</Text>
+            <Text style={styles.statValue}>{stats.totalUnpaidAmount.toFixed(2)}</Text>
+            <Text style={styles.statLabel}>{t.unpaidAmount || 'Unpaid Amount'}</Text>
           </View>
         </View>
 

@@ -28,7 +28,7 @@ import {
 } from 'date-fns';
 import { loadSecurity, saveSecurity, deleteReceipt, clearAllReceipts } from '../utils/storage';
 import { hashPin, hashAnswer } from '../utils/security';
-import { printReceipt } from '../utils/printer';
+import { printReceipt } from '../utils/print';
 
 export default function HistoryScreen({
   receipts,

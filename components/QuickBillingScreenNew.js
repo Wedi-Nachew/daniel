@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { COLORS } from '../utils/constants';
 import { format, startOfDay } from 'date-fns';
-import { printReceipt } from '../utils/printer';
+import { printReceipt, generatePDFReceipt, printPDFReceipt, generateAndSharePDFReceipt, testTigrinyaPDF, testTigrinyaHTML, printReceiptAsImage, generateAndShareReceiptImage } from '../utils/print';
 export default function QuickBillingScreenNew({ 
   receipts, 
   setReceipts, 
@@ -26,6 +26,11 @@ export default function QuickBillingScreenNew({
   const [price, setPrice] = useState('');
   const [currentLines, setCurrentLines] = useState([]);
   const [showPreview, setShowPreview] = useState(false);
+  const [isPaid, setIsPaid] = useState(true);
+  const [showUnpaidModal, setShowUnpaidModal] = useState(false);
+  const [unpaidMode, setUnpaidMode] = useState('full'); // 'full' | 'partial'
+  const [partialPaidAmount, setPartialPaidAmount] = useState('');
+  const [customerName, setCustomerName] = useState('');
 
   // Calculate today's stats
   const today = startOfDay(new Date());
@@ -77,28 +82,121 @@ export default function QuickBillingScreenNew({
       return;
     }
 
+    let paidAmount = grandTotal;
+    let unpaidAmount = 0;
+    let customer = '';
+    if (!isPaid) {
+      if (unpaidMode === 'full') {
+        paidAmount = 0;
+        unpaidAmount = grandTotal;
+      } else {
+        const paid = parseFloat(partialPaidAmount || '0');
+        if (isNaN(paid) || paid < 0 || paid > grandTotal) {
+          Alert.alert(t.error, 'Enter a valid paid amount');
+          return;
+        }
+        paidAmount = paid;
+        unpaidAmount = parseFloat((grandTotal - paid).toFixed(2));
+      }
+      customer = customerName.trim();
+    }
+
     const receipt = {
       id: Date.now().toString(),
       date: new Date().toISOString(),
       lines: currentLines,
       total: grandTotal.toFixed(2),
       isCopy: false,
+      // unpaid feature fields
+      is_paid: isPaid,
+      paid_amount: parseFloat(paidAmount.toFixed(2)),
+      unpaid_amount: parseFloat(unpaidAmount.toFixed(2)),
+      customer_name: customer || '',
+      payment_history: [],
     };
 
     const newReceipts = [...receipts, receipt];
     setReceipts(newReceipts);
     setCurrentLines([]);
     setShowPreview(false);
+    setIsPaid(true);
+    setUnpaidMode('full');
+    setPartialPaidAmount('');
+    setCustomerName('');
 
     if (printerStatus === 'connected') {
-      const success = await printReceipt(receipt, business, false);
-      if (success) {
-        Alert.alert(t.success, t.receiptSaved);
-      } else {
-        Alert.alert(t.error, t.printError);
-      }
+      // Show print options
+        Alert.alert(
+          'Print Options',
+          'Choose how to print the receipt:',
+          [
+            {
+              text: 'Thermal Printer (Text)',
+              onPress: async () => {
+                const success = await printReceipt(receipt, business, false);
+                if (success) {
+                  Alert.alert(t.success, t.receiptSaved);
+                } else {
+                  Alert.alert(t.error, t.printError);
+                }
+              }
+            },
+            {
+              text: 'Thermal Printer (Image)',
+              onPress: async () => {
+                const success = await printReceiptAsImage(receipt, business, false);
+                if (success) {
+                  Alert.alert(t.success, 'Receipt printed as image with perfect Tigrinya!');
+                } else {
+                  Alert.alert(t.error, 'Failed to print as image');
+                }
+              }
+            },
+            {
+              text: 'Print PDF',
+              onPress: async () => {
+                const success = await printPDFReceipt(receipt, business, false);
+                if (success) {
+                  Alert.alert(t.success, 'PDF printed successfully!');
+                } else {
+                  Alert.alert(t.error, 'Failed to print PDF');
+                }
+              }
+            },
+            {
+              text: 'Generate & Share PDF',
+              onPress: async () => {
+                const pdfUri = await generateAndSharePDFReceipt(receipt, business, false);
+                if (pdfUri) {
+                  Alert.alert(t.success, 'PDF receipt generated and ready to share!');
+                }
+              }
+            },
+            {
+              text: 'Generate & Share Image',
+              onPress: async () => {
+                const imageUri = await generateAndShareReceiptImage(receipt, business, false);
+                if (imageUri) {
+                  Alert.alert(t.success, 'Receipt image generated and ready to share!');
+                }
+              }
+            },
+            {
+              text: 'Skip Printing',
+              onPress: () => {
+                Alert.alert(t.success, t.receiptSaved);
+              }
+            }
+          ]
+        );
     } else {
-      Alert.alert(t.success, t.receiptSaved);
+      // Generate and share PDF when printer not connected
+      const pdfUri = await generateAndSharePDFReceipt(receipt, business, false);
+      if (pdfUri) {
+        Alert.alert(t.success, 'PDF receipt generated and ready to share!');
+      } else {
+        Alert.alert(t.success, t.receiptSaved);
+      }
     }
   };
 
@@ -189,6 +287,68 @@ export default function QuickBillingScreenNew({
     </Modal>
   );
 
+  const UnpaidModal = () => (
+    <Modal
+      visible={showUnpaidModal}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowUnpaidModal(false)}
+    >
+      <View style={styles.uModalOverlay}>
+        <View style={styles.uModalContent}>
+          <Text style={styles.uTitle}>{t.unpaidDetails || 'Unpaid Details'}</Text>
+
+          <View style={styles.uRow}>
+            <TouchableOpacity
+              style={[styles.uOption, unpaidMode === 'full' && styles.uOptionActive]}
+              onPress={() => setUnpaidMode('full')}
+            >
+              <Text style={[styles.uOptionText, unpaidMode === 'full' && styles.uOptionTextActive]}>{t.fullyUnpaid || 'Fully Unpaid'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.uOption, unpaidMode === 'partial' && styles.uOptionActive]}
+              onPress={() => setUnpaidMode('partial')}
+            >
+              <Text style={[styles.uOptionText, unpaidMode === 'partial' && styles.uOptionTextActive]}>{t.partial || 'Partial'}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {unpaidMode === 'partial' && (
+            <View style={{ marginTop: 12 }}>
+              <Text style={styles.inputLabel}>{t.amountPaidNow || 'Amount Paid Now'}</Text>
+              <TextInput
+                style={styles.modernInput}
+                placeholder="0.00"
+                value={partialPaidAmount}
+                onChangeText={setPartialPaidAmount}
+                keyboardType="decimal-pad"
+                placeholderTextColor={COLORS.textLight}
+              />
+            </View>
+          )}
+
+          <View style={{ marginTop: 12 }}>
+            <Text style={styles.inputLabel}>{t.customerNameOptional || 'Customer Name (optional)'}</Text>
+            <TextInput
+              style={styles.modernInput}
+              placeholder="Customer name"
+              value={customerName}
+              onChangeText={setCustomerName}
+              placeholderTextColor={COLORS.textLight}
+            />
+          </View>
+
+          <TouchableOpacity
+            style={[styles.proceedButton, { marginTop: 16 }]}
+            onPress={() => setShowUnpaidModal(false)}
+          >
+            <Text style={styles.proceedButtonText}>{t.done || 'Done'}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
   return (
     <ScrollView style={styles.container}>
       {/* Stats Cards */}
@@ -205,8 +365,43 @@ export default function QuickBillingScreenNew({
         </View>
       </View>
 
+      {/* Test Buttons for Tigrinya PDF */}
+      <View style={styles.testButtonsRow}>
+        <TouchableOpacity 
+          style={[styles.testButton, { backgroundColor: COLORS.success }]}
+          onPress={testTigrinyaPDF}
+        >
+          <Text style={styles.testButtonText}>🧪 Test Tigrinya PDF</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.testButton, { backgroundColor: COLORS.warning }]}
+          onPress={testTigrinyaHTML}
+        >
+          <Text style={styles.testButtonText}>🌐 Test Tigrinya HTML</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Input Form */}
       <View style={styles.card}>
+        {/* Paid / Unpaid Toggle */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, justifyContent: 'space-between' }}>
+          <Text style={styles.inputLabel}>{t.paymentStatus || 'Payment Status'}</Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity
+              style={[styles.uPill, isPaid && styles.uPillActive]}
+              onPress={() => setIsPaid(true)}
+            >
+              <Text style={[styles.uPillText, isPaid && styles.uPillTextActive]}>{t.paid || 'Paid'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.uPill, !isPaid && styles.uPillActive]}
+              onPress={() => { setIsPaid(false); setShowUnpaidModal(true); }}
+            >
+              <Text style={[styles.uPillText, !isPaid && styles.uPillTextActive]}>{t.unpaid || 'Unpaid'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         <Text style={styles.inputLabel}>{t.itemName}</Text>
         <TextInput
           style={styles.modernInput}
@@ -299,6 +494,7 @@ export default function QuickBillingScreenNew({
       )}
 
       <PreviewModal />
+      <UnpaidModal />
     </ScrollView>
   );
 }
@@ -340,6 +536,28 @@ const styles = StyleSheet.create({
     color: COLORS.surface,
     textAlign: 'center',
     opacity: 0.9,
+  },
+  testButtonsRow: {
+    flexDirection: 'row',
+    marginBottom: 16,
+    gap: 12,
+  },
+  testButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  testButtonText: {
+    color: COLORS.surface,
+    fontSize: 12,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
   card: {
     backgroundColor: COLORS.surface,
@@ -649,5 +867,69 @@ const styles = StyleSheet.create({
     color: COLORS.surface,
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  // unpaid modal
+  uModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  uModalContent: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: 20,
+    width: '100%',
+  },
+  uTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  uRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  uOption: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  uOptionActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primary + '10',
+  },
+  uOptionText: {
+    color: COLORS.text,
+    fontWeight: '600',
+  },
+  uOptionTextActive: {
+    color: COLORS.primary,
+  },
+  uPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  uPillActive: {
+    backgroundColor: COLORS.primary + '10',
+    borderColor: COLORS.primary,
+  },
+  uPillText: {
+    color: COLORS.text,
+    fontWeight: '600',
+  },
+  uPillTextActive: {
+    color: COLORS.primary,
   },
 });

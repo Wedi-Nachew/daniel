@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { COLORS } from '../utils/constants';
 import { format } from 'date-fns';
-import { printReceipt } from '../utils/printer';
+import { printReceipt } from '../utils/print';
 
 export default function InventoryBillingScreen({ 
   inventory,

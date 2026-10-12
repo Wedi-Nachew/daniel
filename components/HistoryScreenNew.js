@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -29,7 +29,153 @@ import {
 } from 'date-fns';
 import { loadSecurity, saveSecurity, deleteReceipt, clearAllReceipts } from '../utils/storage';
 import { hashPin, hashAnswer } from '../utils/security';
-import { printReceipt } from '../utils/printer';
+import { printReceipt } from '../utils/print';
+
+// Inline UnpaidReceiptsList component for use in HistoryScreen
+const UnpaidReceiptsList = ({ receipts, setReceipts, business, translations }) => {
+  const t = translations;
+  const [query, setQuery] = useState('');
+  const [minAmt, setMinAmt] = useState('');
+  const [maxAmt, setMaxAmt] = useState('');
+  const [selected, setSelected] = useState(null);
+  const [payment, setPayment] = useState('');
+  const [payer, setPayer] = useState('');
+
+  const unpaid = useMemo(() => {
+    const list = receipts.filter(r => !r.is_paid || (r.unpaid_amount && r.unpaid_amount > 0));
+    const filtered = list.filter(r => {
+      const matchQuery = query.trim() === '' || (r.customer_name || '').toLowerCase().includes(query.toLowerCase()) || r.id.includes(query);
+      const minOk = minAmt.trim() === '' || (parseFloat(r.unpaid_amount) >= parseFloat(minAmt || '0'));
+      const maxOk = maxAmt.trim() === '' || (parseFloat(r.unpaid_amount) <= parseFloat(maxAmt || '999999'));
+      return matchQuery && minOk && maxOk;
+    });
+    return filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
+  }, [receipts, query, minAmt, maxAmt]);
+
+  const settlePayment = async (receipt) => {
+    const amount = parseFloat(payment || '0');
+    if (isNaN(amount) || amount <= 0) {
+      Alert.alert(t.error || 'Error', t.enterValidPayment || 'Enter a valid payment amount');
+      return;
+    }
+    if (amount > receipt.unpaid_amount) {
+      Alert.alert(t.error || 'Error', t.paymentExceedsUnpaid || 'Payment exceeds unpaid amount');
+      return;
+    }
+    const remaining = parseFloat((receipt.unpaid_amount - amount).toFixed(2));
+    const updated = {
+      ...receipt,
+      paid_amount: parseFloat((parseFloat(receipt.paid_amount || 0) + amount).toFixed(2)),
+      unpaid_amount: remaining,
+      is_paid: remaining <= 0,
+      payment_history: [
+        ...(receipt.payment_history || []),
+        { date: new Date().toISOString(), amount, method: 'cash', payer_name: payer || '' },
+      ],
+    };
+    const newReceipts = receipts.map(r => (r.id === receipt.id ? updated : r));
+    setReceipts(newReceipts);
+    setSelected(updated);
+    setPayment('');
+    setPayer('');
+
+    // Print confirmation slip
+    try {
+      await printReceipt(
+        {
+          id: `${receipt.id}-CONF`,
+          date: new Date().toISOString(),
+          lines: [
+            { id: 'p1', name: t.paymentReceived || 'Payment Received', qty: 1, price: amount, total: amount },
+            { id: 'p2', name: `${t.forReceipt || 'For Receipt'} #${receipt.id.slice(-8)}`, qty: 1, price: 0, total: 0 },
+            { id: 'p3', name: `${t.remaining || 'Remaining'}: ${remaining.toFixed(2)}`, qty: 1, price: 0, total: 0 },
+          ],
+          total: amount,
+          isCopy: false,
+        },
+        business,
+        false
+      );
+    } catch {}
+  };
+
+  return (
+    <View style={styles.unpaidContainer}>
+      <View style={styles.unpaidFilters}>
+        <TextInput
+          style={styles.unpaidInput}
+          placeholder={t.searchUnpaidPlaceholder || 'Search by customer or receipt id'}
+          value={query}
+          onChangeText={setQuery}
+          placeholderTextColor={COLORS.textLight}
+        />
+        <View style={styles.unpaidRow}>
+          <TextInput
+            style={[styles.unpaidInput, { flex: 1 }]}
+            placeholder={t.minUnpaid || 'Min unpaid'}
+            value={minAmt}
+            onChangeText={setMinAmt}
+            keyboardType="decimal-pad"
+            placeholderTextColor={COLORS.textLight}
+          />
+          <TextInput
+            style={[styles.unpaidInput, { flex: 1 }]}
+            placeholder={t.maxUnpaid || 'Max unpaid'}
+            value={maxAmt}
+            onChangeText={setMaxAmt}
+            keyboardType="decimal-pad"
+            placeholderTextColor={COLORS.textLight}
+          />
+        </View>
+      </View>
+
+      {unpaid.length === 0 ? (
+        <View style={styles.unpaidEmptyCard}>
+          <Text style={styles.unpaidEmptyIcon}>💳</Text>
+          <Text style={styles.unpaidEmptyText}>{t.noUnpaidReceipts || 'No unpaid receipts'}</Text>
+        </View>
+      ) : (
+        unpaid.map(r => (
+          <View key={r.id} style={styles.unpaidCard}>
+            <View style={styles.unpaidHeaderRow}>
+              <View>
+                <Text style={styles.unpaidRId}>#{r.id.slice(-8)}</Text>
+                <Text style={styles.unpaidRDate}>{format(new Date(r.date), 'MMM dd, yyyy • HH:mm')}</Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={styles.unpaidAmount}>{r.unpaid_amount?.toFixed ? r.unpaid_amount.toFixed(2) : r.unpaid_amount}</Text>
+                {!!r.customer_name && <Text style={styles.unpaidCustomer}>{r.customer_name}</Text>}
+              </View>
+            </View>
+
+            <View style={styles.unpaidPayRow}>
+              <TextInput
+                style={[styles.unpaidInput, { flex: 1 }]}
+                placeholder={t.paymentAmount || 'Payment amount'}
+                value={selected?.id === r.id ? payment : ''}
+                onChangeText={setPayment}
+                keyboardType="decimal-pad"
+                placeholderTextColor={COLORS.textLight}
+                onFocus={() => setSelected(r)}
+              />
+              <TextInput
+                style={[styles.unpaidInput, { flex: 1 }]}
+                placeholder={t.payerNameOptional || 'Payer name (optional)'}
+                value={selected?.id === r.id ? payer : ''}
+                onChangeText={setPayer}
+                placeholderTextColor={COLORS.textLight}
+                onFocus={() => setSelected(r)}
+              />
+              <TouchableOpacity style={styles.unpaidPayBtn} onPress={() => settlePayment(r)}>
+                <Text style={styles.unpaidPayText}>✓</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ))
+      )}
+    </View>
+  );
+};
 
 export default function HistoryScreenNew({ 
   receipts, 
@@ -63,6 +209,7 @@ export default function HistoryScreenNew({
   
   // Calendar navigation state
   const [activeTab, setActiveTab] = useState('daily');
+  const [showUnpaidOnly, setShowUnpaidOnly] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showHourlyFilter, setShowHourlyFilter] = useState(false);
   const [startHour, setStartHour] = useState('');
@@ -524,6 +671,28 @@ export default function HistoryScreenNew({
       </View>
 
       <ScrollView>
+        {/* Unpaid toggle */}
+        <View style={{ padding: 16, backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border }}>
+          <TouchableOpacity
+            style={{ alignSelf: 'flex-end', backgroundColor: COLORS.primary + '15', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 }}
+            onPress={() => setShowUnpaidOnly(!showUnpaidOnly)}
+          >
+            <Text style={{ color: COLORS.primary, fontWeight: '600' }}>{showUnpaidOnly ? (t.showAll || 'Show All') : (t.showUnpaid || 'Show Unpaid')}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {showUnpaidOnly && (
+          <View style={{ minHeight: 200 }}>
+            {/* Inline unpaid list */}
+            <UnpaidReceiptsList 
+              receipts={receipts} 
+              setReceipts={setReceipts} 
+              business={business} 
+              translations={t} 
+            />
+          </View>
+        )}
+
         {/* Date Navigation */}
         <View style={styles.dateNav}>
           <TouchableOpacity style={styles.navButton} onPress={handlePrevious}>
@@ -615,7 +784,7 @@ export default function HistoryScreenNew({
           </View>
         )}
 
-        {filteredReceipts.length === 0 ? (
+        {!showUnpaidOnly && (filteredReceipts.length === 0 ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyIcon}>📜</Text>
             <Text style={styles.emptyText}>{t.noReceiptsFound}</Text>
@@ -671,7 +840,7 @@ export default function HistoryScreenNew({
               </View>
             </View>
           ))
-        )}
+        ))}
       </ScrollView>
 
       {/* Delete Receipt Modal */}
@@ -1211,5 +1380,85 @@ const styles = StyleSheet.create({
     color: COLORS.textLight,
     fontSize: 16,
     fontWeight: '600',
+  },
+  // Unpaid receipts styles
+  unpaidContainer: {
+    backgroundColor: COLORS.background,
+  },
+  unpaidFilters: {
+    padding: 16,
+  },
+  unpaidInput: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: COLORS.text,
+    marginBottom: 12,
+  },
+  unpaidRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  unpaidEmptyCard: {
+    backgroundColor: COLORS.surface,
+    padding: 32,
+    margin: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  unpaidEmptyIcon: {
+    fontSize: 48,
+    marginBottom: 8,
+  },
+  unpaidEmptyText: {
+    fontSize: 16,
+    color: COLORS.textLight,
+  },
+  unpaidCard: {
+    backgroundColor: COLORS.surface,
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 12,
+  },
+  unpaidHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  unpaidRId: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.text,
+  },
+  unpaidRDate: {
+    fontSize: 12,
+    color: COLORS.textLight,
+  },
+  unpaidAmount: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.error,
+  },
+  unpaidCustomer: {
+    fontSize: 12,
+    color: COLORS.textLight,
+  },
+  unpaidPayRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  unpaidPayBtn: {
+    backgroundColor: COLORS.success,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unpaidPayText: {
+    color: COLORS.surface,
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

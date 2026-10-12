@@ -9,14 +9,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { COLORS } from '../utils/constants';
-import {
-  requestBluetoothPermissions,
-  isBluetoothEnabled,
-  scanForPrinters,
-  connectToPrinter,
-  disconnectPrinter,
-  diagnoseBluetooth,
-} from '../utils/printer';
+// Legacy printer utilities removed; keep this screen minimal or migrate later
 
 export default function BluetoothTestScreen() {
   const [permissionStatus, setPermissionStatus] = useState('unknown');

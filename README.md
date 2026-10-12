@@ -1,419 +1,148 @@
 # Mill Receipt Pro 🧾
-
-A professional, production-ready mobile application for local mill houses in Eritrea. Built with React Native and Expo, this app enables mill owners and workers to create, print, and manage milling service receipts offline using Bluetooth thermal printers.
-
-## Features ✨
-
-- **Quick Billing**: Fast receipt creation with real-time calculations
-- **Analytics Dashboard**: Revenue tracking with custom date ranges
-- **Receipt History**: PIN-protected access to view and reprint past receipts
-- **Bluetooth Printing**: Support for ESC/POS thermal printers (58mm optimized)
-- **Bilingual Support**: Full support for English and Tigrigna (ትግርኛ)
-- **Offline First**: Works completely offline, no internet required
-- **Business Branding**: Upload logo and customize business information
-
-## Tech Stack 🛠️
-
-- **React Native**: 0.74.5
-- **Expo**: ~51.0.0
-- **Expo Router**: ~3.5.0
-- **React Native Paper**: Material Design components
-- **AsyncStorage**: Local data persistence
-- **Expo Crypto**: Secure PIN hashing
-- **date-fns**: Date manipulation
-- **@conodene/react-native-thermal-receipt-printer-image-qr**: Bluetooth thermal printer integration (BLE-enabled)
-
-## Prerequisites 📋
-
-Before you begin, ensure you have the following installed:
-
-- **Node.js**: v18 or higher ([Download](https://nodejs.org/))
-- **npm** or **yarn**: Package manager
-- **Expo CLI**: Install globally with `npm install -g expo-cli`
-- **Expo Go App**: Install on your mobile device from App Store or Play Store
-
-For iOS development:
-- macOS with Xcode installed
-- iOS Simulator
-
-For Android development:
-- Android Studio with SDK
-- Android Emulator or physical device
-
-## Installation 🚀
-
-### 1. Clone or Download the Project
-
-```bash
-cd mill-receipt-pro
-```
-
-### 2. Install Dependencies
-
-```bash
-npm install
-# or
-yarn install
-```
-
-### 3. Start the Development Server
-
-```bash
-npm start
-# or
-expo start
-```
-
-This will open the Expo Developer Tools in your browser.
-
-### 4. Run on Device/Emulator
-
-**Using Expo Go (Easiest for Development):**
-- Scan the QR code with your phone's camera (iOS) or Expo Go app (Android)
-- The app will load on your device
-
-**Using iOS Simulator:**
-```bash
-npm run ios
-```
-
-**Using Android Emulator:**
-```bash
-npm run android
-```
-
-## Project Structure 📁
-
-```
-mill-receipt-pro/
-├── app/
-│   ├── _layout.js              # Root layout with providers
-│   └── index.js                # Main app with navigation
-├── components/
-│   ├── QuickBillingScreen.js   # Quick billing screen
-│   ├── AnalyticsScreen.js      # Analytics and reports
-│   ├── HistoryScreen.js        # PIN-protected history
-│   └── SettingsScreen.js       # Settings and business info
-├── utils/
-│   ├── constants.js            # Color theme and constants
-│   ├── translations.js         # Bilingual translations
-│   ├── storage.js              # AsyncStorage operations
-│   ├── security.js             # PIN hashing utilities
-│   └── printer.js              # Bluetooth printer functions
-├── assets/
-│   ├── icon.png                # App icon (1024x1024)
-│   ├── splash.png              # Splash screen
-│   └── adaptive-icon.png       # Android adaptive icon
-├── package.json
-├── app.json
-└── README.md
-```
-
-## Configuration ⚙️
-
-### App Configuration (app.json)
-
-The `app.json` file contains all app-level configurations:
-
-- **App Name**: Mill Receipt Pro
-- **Bundle ID**: com.millreceiptpro.app
-- **Version**: 1.0.0
-- **Permissions**: Bluetooth, Camera, Storage
-
-### Color Theme
-
-The app uses a modern purple/violet gradient theme defined in `utils/constants.js`:
-
-```javascript
-Primary: #7C3AED (Purple)
-Secondary: #EC4899 (Pink)
-Success: #10B981 (Green)
-Error: #EF4444 (Red)
-```
-
-## Bluetooth Printer Setup 🖨️
-
-### 📚 Full Documentation
-For complete Bluetooth printer documentation, see:
-- **[BLUETOOTH_PRINTER_SETUP.md](BLUETOOTH_PRINTER_SETUP.md)** - Complete setup guide, troubleshooting, and API reference
-- **[BLUETOOTH_QUICK_REFERENCE.md](BLUETOOTH_QUICK_REFERENCE.md)** - Quick start guide and common tasks
-
-### Supported Printers
-
-This app uses `@conodene/react-native-thermal-receipt-printer-image-qr` v0.1.87 which supports:
-- ESC/POS standard thermal printers
-- Bluetooth Low Energy (BLE) connectivity
-- 58mm and 80mm thermal paper
-- Tested models: MUNBYN, Rongta, Xprinter, GOOJPRT
-
-### Connecting a Printer (Quick Start)
-
-1. **Enable Bluetooth** on your device and turn on your thermal printer
-2. Tap the **🖨️ printer icon** in the top-right corner
-3. Tap **"🔍 Scan for Printers"** button (grant permissions if prompted)
-4. **Select your printer** from the list
-5. **Green dot** = Connected and ready to print!
-
-### Status Indicators
-
-| Color | Status | Meaning |
-|-------|--------|---------|
-| 🟢 Green | Connected | Ready to print |
-| 🔴 Red | Disconnected | No printer connected |
-| 🟡 Yellow | Scanning/Connecting | Operation in progress |
-
-### Android Permissions
-
-The app automatically requests the following permissions:
-- **Android 12+**: `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT`, `ACCESS_FINE_LOCATION`
-- **Android 11 and below**: `BLUETOOTH`, `BLUETOOTH_ADMIN`, `ACCESS_FINE_LOCATION`
-
-All permissions are pre-configured in `AndroidManifest.xml`.
-
-### Diagnostic Tools
-
-Access the **Bluetooth Diagnostic Screen** via the bottom navigation:
-- Step-by-step testing (Permissions → Bluetooth → Scan → Connect)
-- Live operation logs
-- Connection verification
-- Test page printing
-
-### Troubleshooting Quick Fixes
-
-| Problem | Solution |
-|---------|----------|
-| No printers found | 1. Enable Bluetooth<br>2. Turn on printer<br>3. Move closer to printer |
-| Can't connect | 1. Restart printer<br>2. Unpair from system Bluetooth<br>3. Try scanning again |
-| Print fails | 1. Check green dot (connected)<br>2. Verify printer has paper<br>3. Print test page first |
-| No permissions | Settings → Apps → Mill Receipt Pro → Permissions → Enable Bluetooth |
-
-For detailed troubleshooting and advanced features, see [BLUETOOTH_PRINTER_SETUP.md](BLUETOOTH_PRINTER_SETUP.md).
-
-## Usage Guide 📖
-
-### Quick Billing
-
-1. Enter item name, quantity, and unit price
-2. Tap "Add Item" to add to current bill
-3. Add multiple items as needed
-4. Review the current bill with total
-5. Tap "Print & Save" to save and print receipt
-
-### Analytics
-
-1. Select date range using "From" and "To" fields (YYYY-MM-DD format)
-2. Tap "Calculate" to generate analytics
-3. View total receipts and revenue
-4. See top services ranked by revenue
-
-### History (PIN-Protected)
-
-**First Time Setup:**
-1. Create a 4-digit PIN
-2. Set a security question and answer
-3. PIN is securely hashed using SHA-256
-
-**Unlocking:**
-1. Enter your 4-digit PIN
-2. Tap "Unlock"
-
-**Forgot PIN:**
-1. Tap "Forgot PIN?"
-2. Answer your security question
-3. Set a new PIN
-
-**Viewing & Reprinting:**
-1. Browse all past receipts
-2. Filter by date range
-3. Tap "Print Copy" to reprint (adds COPY watermark)
-
-### Settings
-
-**Language:**
-- Switch between English and Tigrigna (ትግርኛ)
-- All text updates immediately
-
-**Business Logo:**
-- Upload from gallery or take photo
-- Displayed on printed receipts
-
-**Business Information:**
-- Set business name, phone, address
-- Auto-saves as you type
-- Printed on all receipts
-
-## Building for Production 🏗️
-
-### Create Development Build
-
-For Bluetooth printer support, you need to create a development build (Expo Go doesn't support native modules):
-
-```bash
-npx expo prebuild
-```
-
-### Build for Android (APK)
-
-```bash
-# Build APK locally
-npm run android --variant release
-
-# Or use EAS Build (recommended)
-npm install -g eas-cli
-eas build --platform android --profile production
-```
-
-### Build for iOS (IPA)
-
-```bash
-# Requires Apple Developer account
-npm run ios --configuration Release
-
-# Or use EAS Build
-eas build --platform ios --profile production
-```
-
-### EAS Build Configuration
-
-Create `eas.json`:
-
-```json
-{
-  "build": {
-    "production": {
-      "android": {
-        "buildType": "apk"
-      },
-      "ios": {
-        "buildConfiguration": "Release"
-      }
-    }
-  }
-}
-```
-
-## Data Management 💾
-
-### Storage
-
-All data is stored locally using AsyncStorage:
-- **Receipts**: JSON array of all receipts
-- **Business Info**: Business name, phone, address, logo
-- **Security**: Hashed PIN and security Q&A
-- **Language**: Selected language (en/ti)
-
-### Data Persistence
-
-- Receipts are auto-saved when created
-- Business info saves automatically on change
-- No data is sent to external servers
-- All data stays on device
-
-### Data Security
-
-- PINs are hashed using SHA-256 with salt
-- Security answers are case-insensitive and hashed
-- No plaintext passwords are stored
-
-## Customization 🎨
-
-### Changing Colors
-
-Edit `utils/constants.js`:
-
-```javascript
-export const COLORS = {
-  primary: '#YOUR_COLOR',
-  // ... other colors
-};
-```
-
-### Adding Languages
-
-Edit `utils/translations.js` and add new language:
-
-```javascript
-export const translations = {
-  en: { /* English */ },
-  ti: { /* Tigrigna */ },
-  ar: { /* Your new language */ },
-};
-```
-
-### Modifying Receipt Format
-
-Edit `utils/printer.js` in the `printReceipt` function to customize layout.
-
-## Troubleshooting 🔧
-
-### App won't start
-
-```bash
-# Clear cache and reinstall
-rm -rf node_modules
-npm install
-npx expo start -c
-```
-
-### Build errors
-
-```bash
-# Clear Expo cache
-npx expo start -c
-
-# Reset Metro bundler
-npx react-native start --reset-cache
-```
-
-### AsyncStorage issues
-
-```bash
-# Clear app data on device or emulator
-# iOS: Delete app and reinstall
-# Android: Settings > Apps > Mill Receipt Pro > Clear Data
-```
-
-## Known Limitations ⚠️
-
-1. **Bluetooth Printer**: Requires physical testing with real printer (simulator won't work)
-2. **Development Build Required**: Bluetooth printing requires `npx expo run:android` (Expo Go doesn't support native BLE modules)
-3. **Platform-Specific**: Some features may behave differently on iOS vs Android
-4. **Printer Compatibility**: Only ESC/POS compatible BLE thermal printers are supported
-
-## Support & Contact 📞
-
-**Developer**: Mill Receipt Pro Team
-**Email**: developer@millreceiptpro.com
-**Phone**: +291-XXX-XXXXXX
-**Website**: www.millreceiptpro.com
-
-For technical support, feature requests, or bug reports, please contact us via email or phone.
-
-## License 📄
-
-Copyright © 2024 Mill Receipt Pro. All rights reserved.
-
-## Version History 📝
-
-### Version 1.0.0 (Current)
-- Initial release
-- Quick billing with item management
-- Analytics with date range filtering
-- PIN-protected history
-- Bluetooth thermal printer support
-- Bilingual support (English/Tigrigna)
-- Business branding (logo & info)
-- Offline-first architecture
-
-## Acknowledgments 🙏
-
-Built with:
-- React Native & Expo
-- React Native Paper
-- Expo ecosystem libraries
-- @conodene/react-native-thermal-receipt-printer-image-qr
-- Open source community
+### *Offline Mobile Point-of-Sale & Receipt System for Grain Mills*
+
+[![React Native](https://img.shields.io/badge/React%20Native-0.74.5-61DAFB?logo=react&logoColor=white)](https://reactnative.dev/)
+[![Expo](https://img.shields.io/badge/Expo-SDK%2051-000020?logo=expo&logoColor=white)](https://expo.dev/)
+[![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20iOS-3DDC84?logo=android&logoColor=white)](https://www.android.com/)
+[![Offline First](https://img.shields.io/badge/Architecture-100%25%20Offline%20First-success)](#architecture--data-flow)
+[![Language](https://img.shields.io/badge/Languages-English%20%7C%20ትግርኛ%20(Tigrinya)-orange)](#bilingual-support)
+[![License](https://img.shields.io/badge/License-Commercial%20Proprietary-red)](#licensing--activation)
 
 ---
 
-Made with ❤️ for mill houses in Eritrea
+## Executive Overview 🌾
+
+**Mill Receipt Pro** is a robust, production-grade mobile Point-of-Sale (POS) and accounting application engineered specifically for grain mill houses (*መጥሓን*) in Ethiopia and the wider region. 
+
+Designed for environments where network connectivity and power infrastructure can be intermittent, the application operates **100% offline**. It pairs directly with portable **58mm ESC/POS Bluetooth thermal printers** to generate fast, bilingual customer receipts, track customer credit and debt repayments, manage grain service pricing, and deliver actionable revenue analytics without requiring internet access or cloud subscriptions.
+
+---
+
+## Key Features ✨
+
+### 🧾 1. Rapid Milling Billing & Pre-sets
+- **Lightning-Fast Ticket Generation**: Add line items with quantity (kg/bags) and unit pricing with real-time total calculations.
+- **Preconfigured Grain Catalog**: Instant support for regional staples including **Taff (ጣፍ)**, **Wheat / Snday (ስንዳይ)**, **Barley / Sgem (ስገም)**, **Sorghum / Mshela (ምሸላ)**, **Berbere (በርበረ)**, **Shro (ሽሮ)**, **Dagusha (ዳጉሻ)**, and more.
+- **Live Receipt Preview**: Full modal preview displaying business branding, line items, timestamps, and payment status prior to printing.
+
+### 💳 2. Credit & Unpaid Debt Ledger
+- **Flexible Payment Status**: Mark receipts as **Fully Paid**, **Fully Unpaid**, or **Partially Paid** at checkout.
+- **Customer Debt Tracking**: Associate outstanding balances with customer names for transparent credit recording.
+- **Partial Payment Settlement**: Dedicated debt management screen allowing customers to pay down debts over time with automatic balance recalculation.
+- **Audit Trails & Confirmation Slips**: Logs every payment event with timestamps and prints dedicated settlement slips (`-CONF`).
+
+### 🖨️ 3. Dual Print Engine (Bluetooth Thermal + High-Res PDF)
+- **Direct ESC/POS BLE Thermal Printing**: Fast 58mm mobile receipt printing using low-energy Bluetooth.
+- **Smart Phonetic Tigrinya Transliteration**: Automatic Ge'ez-to-Latin transliteration and dictionary matching so standard ESC/POS printers render Tigrinya names cleanly without missing characters.
+- **Native Ge'ez Ethiopic PDF Export**: High-fidelity PDF generation (`react-native-html-to-pdf`) preserving native Tigrinya typography (`ትግርኛ`) with system print and instant messaging sharing (`expo-sharing`).
+- **Auto-Reconnect & Self-Healing**: Background Bluetooth polling with automatic reconnection to previously paired printers.
+
+### 📊 4. Business Analytics & Financial Insights
+- **Flexible Time Horizons**: Real-time sales aggregation across **Daily**, **Weekly**, and **Monthly** intervals.
+- **Hourly Traffic Distribution**: Visualizes peak milling hours so owners can optimize staff and machinery operation.
+- **Top Service Ranking**: Identifies top-performing grains and services ranked by total revenue contribution.
+- **Duplicate Protection**: Duplicate/reprinted receipts are automatically excluded from financial metrics to prevent distorted accounting.
+
+### 📦 5. Inventory & Service Pricing Management
+- **Customizable Services**: Define and update milling rates per grain type.
+- **Instant Synchronization**: Changes to service prices reflect immediately in the billing catalog.
+
+### 🔐 6. Role-Based Security & PIN Protection
+- **Restricted Access**: Protects transaction history, receipt deletion, and settings with a 4-digit PIN.
+- **Cryptographic Hashing**: PINs and security answers are hashed using **SHA-256 with salt** via `expo-crypto` (zero plaintext storage).
+- **Two-Factor Recovery**: Built-in security question verification allows safe PIN resets without data wipe.
+- **Watermarked Reprints**: Reprinted slips are watermarked with `* COPY / ቅዳሕ *` to prevent ticket fraud.
+
+### 🔑 7. Device-Bound Hardware Licensing
+- **Device-Tied Activation**: Generates a tamper-resistant 16-character Hardware Device ID tied to device hardware.
+- **Configurable Free Trial**: Automatic 5-day trial period with live countdown banner.
+- **Cryptographic License Keys**: SHA-256 signature verification preventing key piracy across different devices.
+- **Hidden Admin Generator**: Secure multi-tap owner panel for instant customer key generation.
+
+---
+
+## System Architecture 🏗️
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Mill Receipt Pro (Client)                    │
+├─────────────────┬───────────────────────────────┬───────────────┤
+│   Presentation  │         Business Logic        │    Storage    │
+├─────────────────┼───────────────────────────────┼───────────────┤
+│ • Quick Billing │ • Pricing & Tax Computation   │ • Receipts    │
+│ • Debt Ledger   │ • Phonetic Transliteration    │ • Business    │
+│ • Analytics     │ • SHA-256 Cryptographic Auth  │ • Inventory   │
+│ • Settings      │ • ESC/POS Byte Formatting     │ • Security    │
+│ • Printer Modal │ • License Validation          │ • Preferences │
+└────────┬────────┴───────────────┬───────────────┴───────┬───────┘
+         │                        │                       │
+         ▼                        ▼                       ▼
+┌──────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│ 58mm BLE Thermal │    │ High-Res Ge'ez   │    │  AsyncStorage   │
+│ ESC/POS Printer  │    │ PDF / Share      │    │  Local Engine   │
+└──────────────────┘    └──────────────────┘    └─────────────────┘
+```
+
+---
+
+## Tech Stack 🛠️
+
+| Category | Technology | Purpose |
+| :--- | :--- | :--- |
+| **Framework** | [React Native 0.74.5](https://reactnative.dev/) | Cross-platform native mobile runtime |
+| **Tooling** | [Expo SDK 51](https://expo.dev/) & [Expo Router 3.5](https://docs.expo.dev/router/introduction/) | Application lifecycle, routing, and native plugins |
+| **UI Components** | [React Native Paper 5.12](https://callstack.github.io/react-native-paper/) | Modern Material Design UI components |
+| **Hardware Printing** | `react-native-thermal-receipt-printer-image-qr` | Low-level ESC/POS Bluetooth protocol communication |
+| **Document Engine** | `react-native-html-to-pdf` & `react-native-print` | High-resolution PDF generation with Ethiopic font support |
+| **Cryptography** | `expo-crypto` & `expo-device` | SHA-256 PIN hashing, device fingerprinting & license generation |
+| **Data Storage** | `@react-native-async-storage/async-storage` | High-performance, zero-latency local persistent key-value store |
+| **Date & Time** | `date-fns 3.0` | Calendar parsing, shift intervals, and report aggregation |
+
+---
+
+## Prerequisites & Requirements 📋
+
+- **Node.js**: `v18.0.0` or higher ([Download Node.js](https://nodejs.org/))
+- **Package Manager**: `npm` (`v9+`) or `yarn`
+- **Expo CLI**: `npx expo`
+- **Mobile Hardware**:
+  - Android device running **Android 8.0 (Oreo)** or higher (Android 12+ fully supported with granular Bluetooth permissions).
+  - Portable **58mm ESC/POS Bluetooth Thermal Printer** (e.g., MPT-II, POS-5802, Goojprt, or equivalent).
+
+> **Important**: Native Bluetooth hardware modules cannot run inside generic Expo Go client apps. You must generate a development build (`npx expo run:android`) or standalone production APK.
+
+---
+## Operational Guide 📖
+
+### 1. Bluetooth Printer Pairing
+1. Power on your 58mm thermal printer and enable Bluetooth on the mobile device.
+2. Tap the **Printer Icon (🖨️)** in the top navigation bar.
+3. Tap **"Scan Printers"** to locate nearby Bluetooth devices.
+4. Select your printer from the list; the indicator turns **Green** upon connection.
+5. The app automatically remembers and reconnects to this device on subsequent launches.
+
+### 2. Processing a Milling Order
+1. In the **Billing** tab, select a grain type or type a custom service name.
+2. Enter the quantity and unit price, then tap **"+ Add Item"**.
+3. Choose the payment status:
+   - **Paid**: Order is settled immediately.
+   - **Unpaid / Partial**: Specify the amount collected now and enter the customer's name.
+4. Tap **"🖨️ Print"** to send the ESC/POS receipt directly to the thermal printer, or **"👁️ Preview"** to inspect and generate a shareable PDF.
+
+### 3. Managing Customer Debts
+1. Navigate to the **Unpaid (💳)** tab.
+2. Search by customer name, ticket ID, or balance range.
+3. Tap on a customer record to view balance history.
+4. Enter payment amount received and tap **"Settle Payment"** to update balances and print a confirmation slip.
+
+### 4. End-of-Day Financial Reconciliation
+1. Open the **Analytics (📊)** tab.
+2. Toggle between **Daily**, **Weekly**, or **Monthly** views.
+3. Review total gross revenue, ticket count, and the hourly traffic graph to assess daily operations.
+
+### 5. Accessing Protected History
+1. Open the **History (📜)** tab.
+2. Enter your 4-digit security PIN to unlock the archive.
+3. Search or reprint any prior receipt.
+
+---
